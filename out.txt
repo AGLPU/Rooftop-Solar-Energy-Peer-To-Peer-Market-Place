@@ -1,0 +1,44 @@
+============================= test session starts =============================
+platform win32 -- Python 3.12.0, pytest-8.2.2, pluggy-1.6.0 -- C:\CATS\hackathon\rooftop-solar-marketplace\venv\Scripts\python.exe
+cachedir: .pytest_cache
+rootdir: C:\CATS\hackathon\rooftop-solar-marketplace
+plugins: anyio-4.14.0, asyncio-0.23.7
+asyncio: mode=Mode.STRICT
+collecting ... collected 14 items
+
+tests/test_users.py::test_register_success PASSED                        [  7%]
+tests/test_users.py::test_register_duplicate_email PASSED                [ 14%]
+tests/test_users.py::test_register_duplicate_username PASSED             [ 21%]
+tests/test_users.py::test_register_password_mismatch PASSED              [ 28%]
+tests/test_users.py::test_register_invalid_wallet PASSED                 [ 35%]
+tests/test_users.py::test_login_success PASSED                           [ 42%]
+tests/test_users.py::test_login_wrong_password PASSED                    [ 50%]
+tests/test_users.py::test_login_unknown_email PASSED                     [ 57%]
+tests/test_users.py::test_get_me PASSED                                  [ 64%]
+tests/test_users.py::test_get_me_no_token PASSED                         [ 71%]
+tests/test_users.py::test_update_user PASSED                             [ 78%]
+tests/test_users.py::test_change_password PASSED                         [ 85%]
+tests/test_users.py::test_deactivate_user PASSED                         [ 92%]
+tests/test_users.py::test_health PASSED                                  [100%]
+
+============================== warnings summary ===============================
+venv\Lib\site-packages\pydantic\_internal\_config.py:284
+  C:\CATS\hackathon\rooftop-solar-marketplace\venv\Lib\site-packages\pydantic\_internal\_config.py:284: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.7/migration/
+    warnings.warn(DEPRECATION_MESSAGE, DeprecationWarning)
+
+app\database.py:18
+  C:\CATS\hackathon\rooftop-solar-marketplace\app\database.py:18: MovedIn20Warning: The ``declarative_base()`` function is now available as sqlalchemy.orm.declarative_base(). (deprecated since: 2.0) (Background on SQLAlchemy 2.0 at: https://sqlalche.me/e/b8d9)
+    Base = declarative_base()
+
+tests/test_users.py::test_get_me
+tests/test_users.py::test_update_user
+tests/test_users.py::test_update_user
+tests/test_users.py::test_change_password
+tests/test_users.py::test_change_password
+tests/test_users.py::test_deactivate_user
+tests/test_users.py::test_deactivate_user
+  C:\CATS\hackathon\rooftop-solar-marketplace\venv\Lib\site-packages\jose\jwt.py:311: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    now = timegm(datetime.utcnow().utctimetuple())
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+======================= 14 passed, 9 warnings in 3.51s ========================
