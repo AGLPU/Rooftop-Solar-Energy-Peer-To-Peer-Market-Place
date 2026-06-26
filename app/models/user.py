@@ -6,6 +6,7 @@ from sqlalchemy import (
     Boolean, Column, DateTime, Enum, String, Text, func
 )
 from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.orm import relationship
 
 from app.database import Base
 
@@ -67,6 +68,11 @@ class User(Base):
         nullable=False,
     )
     last_login_at = Column(DateTime(timezone=True), nullable=True)
+
+    # ─── Relationships ───────────────────────────────────────
+    listings = relationship("Listing", back_populates="seller", foreign_keys="Listing.seller_id")
+    purchases = relationship("Purchase", back_populates="buyer", foreign_keys="Purchase.buyer_id")
+    sales = relationship("Purchase", back_populates="seller", foreign_keys="Purchase.seller_id")
 
     def __repr__(self) -> str:
         return f"<User id={self.id} email={self.email} role={self.role}>"

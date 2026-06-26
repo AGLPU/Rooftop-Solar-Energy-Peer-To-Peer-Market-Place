@@ -47,3 +47,28 @@ Thumbs.db
 *.db
 *.sqlite3
 
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# Output files
+out.txt
+err.txt
+test_out.txt
+test_output.txt
+server_output.txt
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# MyPy
+.mypy_cache/
+.dmypy.json
+dmypy.json

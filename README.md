@@ -6,6 +6,57 @@ A **FastAPI** backend for a decentralised solar energy trading platform where **
 
 ---
 
+## ✨ Features
+
+### **Built & Working** ✅
+- 🔐 **User Authentication** — JWT-based access & refresh tokens
+- 👥 **User Management** — Registration, login, profile updates
+- 🛡️ **Role-based Access Control** — Buyer, Seller, Admin roles
+- 🔒 **Password Security** — Bcrypt hashing (never store plain passwords)
+- 📧 **Email Validation** — Automatic with Pydantic
+- 🏷️ **Ethereum Wallet** — Optional wallet address for users
+- 🗄️ **Database Optimization** — Read/write split for Aurora PostgreSQL
+- 📝 **API Documentation** — Auto-generated Swagger UI & ReDoc
+- 🧪 **Testing** — Full test suite with in-memory SQLite
+- 🔄 **Auto-reload** — Development server with hot reload
+
+### **Coming Soon** 🚧
+- ⚡ **Solar Listings** — Sellers list available energy
+- 💰 **Energy Purchases** — Buyers purchase energy credits
+- 📜 **Smart Contracts** — Ethereum ERC-20 token settlement
+- 🔗 **Blockchain Integration** — Web3.py for transaction verification
+
+---
+
+## 🛠️ Technology Stack
+
+### **Backend**
+- **FastAPI** — Modern, fast Python web framework
+- **Uvicorn** — ASGI server for async Python
+- **SQLAlchemy** — ORM for database operations
+- **Alembic** — Database migration tool
+- **Pydantic** — Data validation and settings management
+
+### **Security**
+- **Python-JOSE** — JWT token generation and validation
+- **Passlib** — Password hashing with bcrypt
+- **Cryptography** — Additional crypto utilities
+
+### **Database**
+- **AWS RDS Aurora PostgreSQL** — Managed relational database
+- **Psycopg2** — PostgreSQL adapter for Python
+- **Read Replica Support** — Optimized query performance
+
+### **Testing**
+- **Pytest** — Testing framework
+- **HTTPX** — Async HTTP client for testing
+
+### **Development**
+- **Python-dotenv** — Environment variable management
+- **Python-multipart** — File upload support
+
+---
+
 ## 🏗️ Architecture
 
 ```
@@ -41,35 +92,137 @@ rooftop-solar-marketplace/
 
 ## 🚀 Quick Start
 
-### 1 — Clone & create virtual environment
-```bash
+### 🔄 **For Cloned Repository (Windows Environment)**
+
+If you've **cloned** this repository from GitHub and want to run it on Windows:
+
+#### 1️⃣ Navigate to project directory
+```powershell
 cd C:\CATS\hackathon\rooftop-solar-marketplace
-python -m venv venv
-venv\Scripts\activate          # Windows
 ```
 
-### 2 — Install dependencies
-```bash
+#### 2️⃣ Create Python virtual environment
+```powershell
+python -m venv venv
+```
+
+#### 3️⃣ Activate virtual environment
+```powershell
+# Windows PowerShell
+venv\Scripts\activate
+
+# Windows Command Prompt
+venv\Scripts\activate.bat
+```
+✅ You should see `(venv)` prefix in your terminal
+
+#### 4️⃣ Install all dependencies
+```powershell
 pip install -r requirements.txt
 ```
 
-### 3 — Configure environment
-```bash
+#### 5️⃣ Set up environment variables
+```powershell
+# Copy template to create .env file
 copy .env.example .env
-# Edit .env — set your Aurora DATABASE_URL and SECRET_KEY
 ```
 
-### 4 — Run DB migrations
-```bash
+**Edit `.env` file** and configure:
+- `DATABASE_USERNAME` — Your Aurora PostgreSQL username
+- `DATABASE_PASSWORD` — Your Aurora PostgreSQL password
+- `DATABASE_HOST` — Aurora cluster endpoint
+- `DATABASE_READ_HOST` — Aurora read replica endpoint
+- `DATABASE_NAME` — Database name (e.g., `ecccqadbcapt`)
+- `DATABASE_SCHEMA` — Schema name (e.g., `Dummy`)
+- `SECRET_KEY` — JWT secret key (generate with: `python -c "import secrets; print(secrets.token_urlsafe(32))"`)
+
+#### 6️⃣ Run database migrations
+```powershell
 alembic upgrade head
 ```
+This creates the `users` table in your database.
 
-### 5 — Start the server
-```bash
-uvicorn app.main:app --reload
+#### 7️⃣ Start the development server
+```powershell
+uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+```
+✅ Server running! You'll see: `Uvicorn running on http://127.0.0.1:8000`
+
+#### 8️⃣ Access the application
+- **API Documentation (Swagger)**: http://127.0.0.1:8000/docs
+- **Alternative Docs (ReDoc)**: http://127.0.0.1:8000/redoc
+- **Health Check**: http://127.0.0.1:8000/health
+- **Welcome Page**: http://127.0.0.1:8000/
+
+#### 9️⃣ Stop the server
+Press `Ctrl + C` in the terminal where the server is running.
+
+---
+
+### 📚 **Learning Resources**
+
+If you're new to FastAPI or Python:
+- **SUMMARY.md** — Quick overview of the architecture (5 min read)
+- **ARCHITECTURE_VISUAL.md** — Visual diagrams and data flows
+- **LEARNING_GUIDE.md** — Complete detailed explanation of every file
+- **QUICKSTART.md** — How to use the API endpoints
+
+---
+
+### 🔧 **Troubleshooting**
+
+**Port already in use?**
+```powershell
+# Find process using port 8000
+netstat -ano | findstr :8000
+
+# Kill the process (replace PID with actual number)
+taskkill /PID <PID> /F
 ```
 
-API docs → http://localhost:8000/docs
+**Database connection issues?**
+- Verify `.env` credentials are correct
+- Check VPN/network access to AWS Aurora
+- Test connection: http://127.0.0.1:8000/health
+
+**Module not found errors?**
+```powershell
+# Make sure venv is activated (you should see (venv) in prompt)
+venv\Scripts\activate
+
+# Reinstall dependencies
+pip install -r requirements.txt
+```
+
+---
+
+## 🗄️ Database Configuration
+
+### **AWS Aurora PostgreSQL with Read/Write Split**
+
+This application uses **AWS RDS Aurora PostgreSQL** with optimized read replica support:
+
+**Connection Details** (configured in `.env`):
+- **Primary (Writer)**: Handles INSERT, UPDATE, DELETE operations
+- **Read Replica**: Handles SELECT queries (load balanced)
+- **Schema**: `Dummy` (or your custom schema)
+- **SSL**: Enabled for secure connections
+
+**Environment Variables**:
+```env
+DATABASE_USERNAME=your_username
+DATABASE_PASSWORD=your_password
+DATABASE_HOST=eccc-dev-qa-db-cluster.cluster-xxxxx.ca-central-1.rds.amazonaws.com
+DATABASE_READ_HOST=eccc-dev-qa-db-cluster.cluster-ro-xxxxx.ca-central-1.rds.amazonaws.com
+DATABASE_PORT=5432
+DATABASE_NAME=ecccqadbcapt
+DATABASE_SCHEMA=Dummy
+```
+
+**Benefits**:
+- ✅ Better performance (reads don't block writes)
+- ✅ Automatic failover (Aurora managed)
+- ✅ Scalability (add more read replicas as needed)
 
 ---
 
