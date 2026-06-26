@@ -6,6 +6,9 @@ from uuid import uuid4
 import enum
 
 from app.database import Base
+from app.config import get_settings
+
+settings = get_settings()
 
 
 class ListingStatus(str, enum.Enum):
@@ -22,11 +25,12 @@ class Listing(Base):
     Represents solar energy available for sale
     """
     __tablename__ = "listings"
+    __table_args__ = {"schema": settings.database_schema}
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
 
     # Seller information
-    seller_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    seller_id = Column(UUID(as_uuid=True), ForeignKey(f"{settings.database_schema}.users.id"), nullable=False)
 
     # Energy details
     energy_kwh = Column(Integer, nullable=False)  # Amount of energy in kWh

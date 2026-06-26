@@ -9,6 +9,9 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
 from app.database import Base
+from app.config import get_settings
+
+settings = get_settings()
 
 
 class UserRole(str, enum.Enum):
@@ -25,6 +28,7 @@ class UserStatus(str, enum.Enum):
 
 class User(Base):
     __tablename__ = "users"
+    __table_args__ = {"schema": settings.database_schema}
 
     # ─── Identity ───────────────────────────────────────────
     id = Column(

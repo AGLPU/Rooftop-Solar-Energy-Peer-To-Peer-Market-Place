@@ -6,6 +6,9 @@ from uuid import uuid4
 import enum
 
 from app.database import Base
+from app.config import get_settings
+
+settings = get_settings()
 
 
 class PurchaseStatus(str, enum.Enum):
@@ -22,13 +25,14 @@ class Purchase(Base):
     Represents a transaction where buyer purchases energy from seller
     """
     __tablename__ = "purchases"
+    __table_args__ = {"schema": settings.database_schema}
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
 
     # Buyer and Seller
-    buyer_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
-    seller_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
-    listing_id = Column(UUID(as_uuid=True), ForeignKey("listings.id"), nullable=False)
+    buyer_id = Column(UUID(as_uuid=True), ForeignKey(f"{settings.database_schema}.users.id"), nullable=False)
+    seller_id = Column(UUID(as_uuid=True), ForeignKey(f"{settings.database_schema}.users.id"), nullable=False)
+    listing_id = Column(UUID(as_uuid=True), ForeignKey(f"{settings.database_schema}.listings.id"), nullable=False)
 
     # Purchase details
     energy_kwh = Column(Integer, nullable=False)  # Amount purchased
