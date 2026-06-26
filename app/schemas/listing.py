@@ -5,8 +5,6 @@ from decimal import Decimal
 from typing import Optional
 
 
-# ─── Request Schemas ─────────────────────────────────────────
-
 class ListingCreateRequest(BaseModel):
     """Request to create a new energy listing"""
     energy_kwh: int = Field(..., gt=0, description="Amount of energy in kWh")
@@ -26,8 +24,6 @@ class ListingUpdateRequest(BaseModel):
     expires_at: Optional[datetime] = None
 
 
-# ─── Response Schemas ────────────────────────────────────────
-
 class ListingResponse(BaseModel):
     """Response for a single listing"""
     id: UUID
@@ -42,20 +38,25 @@ class ListingResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     expires_at: Optional[datetime]
-
-    # Computed fields
     total_price: float
     is_available: bool
 
     model_config = ConfigDict(from_attributes=True)
 
 
+class SellerInfo(BaseModel):
+    """Seller information for listings"""
+    id: UUID
+    username: str
+    email: str
+    role: str
+
+
 class ListingWithSellerResponse(BaseModel):
-    """Response with seller information"""
+    """Response for listing with seller details"""
     id: UUID
     seller_id: UUID
-    seller_name: str = Field(..., description="Seller's full name")
-    seller_wallet: Optional[str] = Field(None, description="Seller's wallet address")
+    seller: SellerInfo
     energy_kwh: int
     price_per_kwh: Decimal
     title: str
@@ -64,9 +65,21 @@ class ListingWithSellerResponse(BaseModel):
     status: str
     blockchain_tx_hash: Optional[str]
     created_at: datetime
+    updated_at: datetime
     expires_at: Optional[datetime]
     total_price: float
     is_available: bool
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ListingListResponse(BaseModel):
+    """Response for a list of listings with pagination"""
+    listings: list[ListingResponse]
+    total: int
+    page: int
+    page_size: int
+    has_more: bool
 
     model_config = ConfigDict(from_attributes=True)
 
