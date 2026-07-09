@@ -27,6 +27,13 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = 60
     refresh_token_expire_days: int = 7
 
+    # Blockchain (optional)
+    blockchain_enabled: bool = False
+    blockchain_rpc_url: str | None = None
+    blockchain_network: str | None = None
+    blockchain_contract_address: str | None = None
+    blockchain_private_key: str | None = None
+
     @computed_field
     @property
     def db_url(self) -> str:
