@@ -41,7 +41,7 @@ class Purchase(Base):
     total_price = Column(Numeric(12, 6), nullable=False)  # Total cost in ETH
 
     # Status
-    status = Column(SQLEnum(PurchaseStatus), default=PurchaseStatus.PENDING, nullable=False)
+    status = Column(SQLEnum(PurchaseStatus, values_callable=lambda x: [e.value for e in x]), default=PurchaseStatus.PENDING, nullable=False)
 
     # Blockchain
     blockchain_tx_hash = Column(String(66), nullable=True)  # Ethereum transaction hash (purchase)

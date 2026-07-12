@@ -42,7 +42,7 @@ class Listing(Base):
     location = Column(String(200), nullable=True)  # City, region
 
     # Status
-    status = Column(SQLEnum(ListingStatus), default=ListingStatus.ACTIVE, nullable=False)
+    status = Column(SQLEnum(ListingStatus, values_callable=lambda x: [e.value for e in x]), default=ListingStatus.ACTIVE, nullable=False)
 
     # Blockchain
     blockchain_tx_hash = Column(String(66), nullable=True)  # Ethereum tx hash (0x + 64 chars)
