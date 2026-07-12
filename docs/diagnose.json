@@ -1,0 +1,37 @@
+{
+  "schema_count": 18,
+  "schema_names": [
+    "ChangePasswordRequest",
+    "HTTPValidationError",
+    "ListingCreateRequest",
+    "ListingResponse",
+    "ListingStatus",
+    "ListingUpdateRequest",
+    "PurchaseCreateRequest",
+    "PurchaseResponse",
+    "TokenResponse",
+    "UserLoginRequest",
+    "UserRegisterRequest",
+    "UserResponse",
+    "UserRole",
+    "UserStatus",
+    "UserUpdateRequest",
+    "ValidationError",
+    "app__schemas__listing__MessageResponse",
+    "app__schemas__user__MessageResponse"
+  ],
+  "sample_register": {
+    "content": {
+      "application/json": {
+        "schema": {
+          "$ref": "#/components/schemas/UserRegisterRequest"
+        }
+      }
+    },
+    "required": true
+  },
+  "components_keys": [
+    "schemas",
+    "securitySchemes"
+  ]
+}

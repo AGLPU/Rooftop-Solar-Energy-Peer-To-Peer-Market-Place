@@ -119,23 +119,27 @@ class BlockchainService:
     @staticmethod
     def compute_listing_hash(listing) -> str:
         """
-        Compute a SHA256 hash of ALL listing fields.
+        Compute a SHA256 hash of IMMUTABLE listing fields only.
         This is stored on-chain at mint time.
-        Any DB field change will produce a different hash → tamper detected.
 
-        Fields included: id, seller_id, energy_kwh, price_per_kwh, title,
-                         description, location, status, expires_at, created_at
+        Fields included (cannot be changed after creation):
+          - id, seller_id        → identity
+          - energy_kwh           → core financial term
+          - price_per_kwh        → core financial term
+          - location             → buyers filter by this; tampering = fraud
+          - expires_at           → tampering could extend listing indefinitely
+          - created_at           → timestamp anchor
+
+        Mutable fields (title, description) are excluded —
+        they are cosmetic and can be updated via API safely.
         """
         data = {
             "id":            str(listing.id),
             "seller_id":     str(listing.seller_id),
             "energy_kwh":    int(listing.energy_kwh),
             "price_per_kwh": str(listing.price_per_kwh),
-            "title":         listing.title,
-            "description":   listing.description or "",
-            "location":      listing.location or "",
-            "status":        str(listing.status.value if hasattr(listing.status, 'value') else listing.status),
-            "expires_at":    listing.expires_at.isoformat() if listing.expires_at else "",
+            "location":      listing.location or "",       # buyers filter by this — tamper = fraud
+            "expires_at":    listing.expires_at.isoformat() if listing.expires_at else "",  # tamper = listing never expires
             "created_at":    listing.created_at.isoformat() if listing.created_at else "",
         }
         # Sort keys for deterministic ordering

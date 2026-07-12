@@ -161,7 +161,39 @@ class ListingService:
                 detail="You can only update your own listings"
             )
 
-        # Update fields if provided
+        # ── Block changes to blockchain-immutable fields ───────────────────
+        # These fields are recorded on-chain at mint time.
+        # Changing them in DB would cause a TAMPERED status on verify.
+        blockchain = get_blockchain_service()
+        if listing.blockchain_tx_hash and blockchain.is_available():
+            if payload.price_per_kwh is not None and payload.price_per_kwh != listing.price_per_kwh:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="price_per_kwh cannot be changed after listing is recorded on blockchain. Cancel and create a new listing."
+                )
+            if hasattr(payload, 'energy_kwh') and payload.energy_kwh is not None and payload.energy_kwh != listing.energy_kwh:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="energy_kwh cannot be changed after listing is recorded on blockchain. Cancel and create a new listing."
+                )
+            if payload.location is not None and payload.location != listing.location:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="location cannot be changed after listing is recorded on blockchain. Solar panels don't move — cancel and create a new listing."
+                )
+            if payload.expires_at is not None and listing.expires_at is not None:
+                if payload.expires_at < listing.expires_at:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail="expires_at cannot be reduced after listing is recorded on blockchain. You can only extend the expiry date."
+                    )
+                if payload.expires_at != listing.expires_at:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail="expires_at is recorded on blockchain and cannot be changed. Cancel and create a new listing with a different expiry."
+                    )
+
+        # Update allowed fields only
         if payload.price_per_kwh is not None:
             listing.price_per_kwh = payload.price_per_kwh
         if payload.title is not None:

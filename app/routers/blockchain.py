@@ -1,11 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from typing import Optional
+from typing import Optional, List
 from uuid import UUID
 
 from app.database import get_read_db
 from app.models.user import User, UserRole
-from app.models.listing import Listing
+from app.models.listing import Listing, ListingStatus
 from app.models.purchase import Purchase
 from app.services.blockchain_service import get_blockchain_service
 from app.utils.auth import get_current_active_user, require_admin
@@ -81,12 +81,13 @@ def verify_listing_on_blockchain(
             detail="Listing not found"
         )
 
-    # Only seller who owns it, or admin, can verify
+    # Seller (own listing), Buyer (any active listing), or Admin can verify
     if current_user.role != UserRole.ADMIN and listing.seller_id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You can only verify your own listings"
-        )
+        if current_user.role != UserRole.BUYER:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied"
+            )
 
     # Fetch seller
     seller = listing.seller
@@ -315,5 +316,310 @@ def admin_wallet_summary(
             "current_balance = total_produced - tokens_sold - tokens_consumed. "
             "All reads are free (eth_call — no gas)."
         )
+    }
+
+
+# ─── My Balance (Seller / Buyer) ─────────────────────────────────────────────
+
+@router.get(
+    "/my/balance",
+    summary="My SEC token balance",
+    description=(
+        "Returns the caller's own SEC token balance from the blockchain.\n\n"
+        "- **Seller**: see how many tokens you have from minted listings.\n"
+        "- **Buyer**: see how many tokens you have from purchases.\n"
+        "- No need to know your wallet address — it's read from your profile."
+    )
+)
+def get_my_balance(
+    db: Session = Depends(get_read_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    if not current_user.wallet_address:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Your account has no wallet address configured."
+        )
+
+    blockchain = get_blockchain_service()
+    if not blockchain.is_available():
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Blockchain service is not available"
+        )
+
+    balance        = blockchain.get_energy_balance(current_user.wallet_address)
+    total_produced = blockchain.get_energy_produced(current_user.wallet_address) if current_user.role == UserRole.SELLER else None
+    total_consumed = blockchain.get_energy_consumed(current_user.wallet_address) if current_user.role == UserRole.BUYER  else None
+
+    return {
+        "user_id":          str(current_user.id),
+        "username":         current_user.username,
+        "role":             current_user.role,
+        "wallet_address":   current_user.wallet_address,
+        "balance_kwh":      balance,
+        "total_produced_kwh": total_produced,
+        "total_consumed_kwh": total_consumed,
+        "note": "1 SEC token = 1 kWh of solar energy"
+    }
+
+
+# ─── Seller: My Listings Blockchain Status ───────────────────────────────────
+
+@router.get(
+    "/my/listings",
+    summary="[Seller] Blockchain status of all my listings",
+    description=(
+        "Seller-only endpoint.\n\n"
+        "Returns all listings for the logged-in seller with their blockchain status:\n"
+        "- Whether tokens were minted\n"
+        "- VERIFIED or TAMPERED integrity status per listing\n"
+        "- Mint transaction hash and block"
+    )
+)
+def get_my_listings_blockchain_status(
+    db: Session = Depends(get_read_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    if current_user.role not in (UserRole.SELLER, UserRole.ADMIN):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only sellers can access this endpoint"
+        )
+
+    blockchain = get_blockchain_service()
+
+    listings = db.query(Listing).filter(
+        Listing.seller_id == current_user.id
+    ).order_by(Listing.created_at.desc()).all()
+
+    result = []
+    for listing in listings:
+        tx_info       = blockchain.get_transaction_info(listing.blockchain_tx_hash) if listing.blockchain_tx_hash else None
+        on_chain      = blockchain.get_listing_record(str(listing.id))
+        integrity     = "UNVERIFIED"
+        integrity_msg = "Blockchain service unavailable or listing not yet on-chain"
+
+        if not listing.blockchain_tx_hash:
+            integrity     = "NO_RECORD"
+            integrity_msg = "No mint transaction — tokens were never minted for this listing"
+        elif tx_info and tx_info.get("status") == "success" and on_chain:
+            recomputed = blockchain.compute_listing_hash(listing)
+            if recomputed == on_chain["listing_hash"]:
+                integrity     = "VERIFIED"
+                integrity_msg = "Hash matches on-chain record — no tampering detected"
+            else:
+                integrity     = "TAMPERED"
+                integrity_msg = "Hash mismatch — one or more immutable fields were changed in DB after mint"
+        elif tx_info and tx_info.get("status") != "success":
+            integrity     = "FAILED"
+            integrity_msg = "Mint transaction failed on-chain — tokens were never actually minted"
+
+        result.append({
+            "listing_id":        str(listing.id),
+            "title":             listing.title,
+            "energy_kwh":        listing.energy_kwh,
+            "price_per_kwh":     str(listing.price_per_kwh),
+            "location":          listing.location,
+            "status":            listing.status,
+            "created_at":        listing.created_at.isoformat() if listing.created_at else None,
+            "blockchain": {
+                "mint_tx_hash":   listing.blockchain_tx_hash,
+                "mint_tx_block":  tx_info.get("block_number") if tx_info else None,
+                "mint_tx_status": tx_info.get("status") if tx_info else "no transaction",
+            },
+            "integrity": {
+                "status":  integrity,
+                "message": integrity_msg,
+            }
+        })
+
+    return {
+        "seller_id":      str(current_user.id),
+        "username":       current_user.username,
+        "wallet_address": current_user.wallet_address,
+        "total_listings": len(result),
+        "listings":       result
+    }
+
+
+# ─── Admin: Audit All Listings ───────────────────────────────────────────────
+
+@router.get(
+    "/admin/audit/listings",
+    summary="[Admin] Blockchain audit of all listings",
+    description=(
+        "Admin-only endpoint.\n\n"
+        "Scans ALL listings in the DB and cross-checks each against the blockchain.\n\n"
+        "Returns a summary with:\n"
+        "- VERIFIED / TAMPERED / NO_RECORD / FAILED status per listing\n"
+        "- Counts of each status\n"
+        "- Etherscan link (on Sepolia) for each mint transaction\n\n"
+        "Use this to detect any DB-level fraud across the platform."
+    )
+)
+def admin_audit_all_listings(
+    listing_status: Optional[ListingStatus] = None,
+    limit: int = 50,
+    skip: int = 0,
+    db: Session = Depends(get_read_db),
+    _: User = Depends(require_admin)
+):
+    blockchain = get_blockchain_service()
+    if not blockchain.is_available():
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Blockchain service is not available"
+        )
+
+    query = db.query(Listing)
+    if listing_status:
+        query = query.filter(Listing.status == listing_status)
+    listings = query.order_by(Listing.created_at.desc()).offset(skip).limit(limit).all()
+
+    # Detect network for Etherscan link
+    network_info = blockchain.get_network_info()
+    chain_id     = network_info.get("chain_id")
+    etherscan_base = (
+        "https://sepolia.etherscan.io/tx" if chain_id == 11155111
+        else "https://etherscan.io/tx"    if chain_id == 1
+        else None  # localhost has no explorer
+    )
+
+    counts  = {"VERIFIED": 0, "TAMPERED": 0, "NO_RECORD": 0, "FAILED": 0, "UNVERIFIED": 0}
+    results = []
+
+    for listing in listings:
+        tx_info  = blockchain.get_transaction_info(listing.blockchain_tx_hash) if listing.blockchain_tx_hash else None
+        on_chain = blockchain.get_listing_record(str(listing.id))
+        integrity     = "UNVERIFIED"
+        integrity_msg = "Could not verify — blockchain data unavailable"
+
+        if not listing.blockchain_tx_hash:
+            integrity     = "NO_RECORD"
+            integrity_msg = "No mint transaction — may have been inserted directly into DB"
+        elif tx_info and tx_info.get("status") == "success" and on_chain:
+            recomputed = blockchain.compute_listing_hash(listing)
+            if recomputed == on_chain["listing_hash"]:
+                integrity     = "VERIFIED"
+                integrity_msg = "All immutable fields match on-chain snapshot"
+            else:
+                integrity     = "TAMPERED"
+                integrity_msg = "Hash mismatch — immutable fields were changed in DB after mint"
+        elif tx_info and tx_info.get("status") != "success":
+            integrity     = "FAILED"
+            integrity_msg = "Mint transaction failed — tokens were never minted"
+
+        counts[integrity] = counts.get(integrity, 0) + 1
+
+        etherscan_url = (
+            f"{etherscan_base}/{listing.blockchain_tx_hash}"
+            if etherscan_base and listing.blockchain_tx_hash else None
+        )
+
+        results.append({
+            "listing_id":      str(listing.id),
+            "title":           listing.title,
+            "seller_id":       str(listing.seller_id),
+            "seller_username": listing.seller.username if listing.seller else None,
+            "energy_kwh":      listing.energy_kwh,
+            "price_per_kwh":   str(listing.price_per_kwh),
+            "location":        listing.location,
+            "listing_status":  listing.status,
+            "created_at":      listing.created_at.isoformat() if listing.created_at else None,
+            "blockchain": {
+                "mint_tx_hash":   listing.blockchain_tx_hash,
+                "mint_tx_block":  tx_info.get("block_number") if tx_info else None,
+                "etherscan_url":  etherscan_url,
+            },
+            "integrity": {
+                "status":  integrity,
+                "message": integrity_msg,
+            }
+        })
+
+    return {
+        "audit_summary": {
+            "total_scanned": len(results),
+            "verified":   counts["VERIFIED"],
+            "tampered":   counts["TAMPERED"],
+            "no_record":  counts["NO_RECORD"],
+            "failed":     counts["FAILED"],
+            "unverified": counts["UNVERIFIED"],
+        },
+        "network": {
+            "chain_id":      chain_id,
+            "block_number":  network_info.get("block_number"),
+            "etherscan_base": etherscan_base or "N/A (localhost)",
+        },
+        "listings": results
+    }
+
+
+# ─── Admin: Platform Wallet Status ───────────────────────────────────────────
+
+@router.get(
+    "/admin/platform-wallet",
+    summary="[Admin] Platform wallet address and ETH balance",
+    description=(
+        "Admin-only endpoint.\n\n"
+        "Shows the platform's backend wallet:\n"
+        "- Public address (derived from BLOCKCHAIN_PRIVATE_KEY in .env)\n"
+        "- ETH balance (used to pay gas for all mint/purchase transactions)\n"
+        "- Etherscan link on Sepolia\n\n"
+        "**Monitor this regularly** — if ETH runs out, minting and purchases will fail."
+    )
+)
+def get_platform_wallet(
+    _: User = Depends(require_admin)
+):
+    blockchain = get_blockchain_service()
+    if not blockchain.is_available():
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Blockchain service is not available"
+        )
+
+    platform_address = blockchain.get_account()
+    if not platform_address:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Could not derive platform wallet address — check BLOCKCHAIN_PRIVATE_KEY in .env"
+        )
+
+    balance_wei  = blockchain.w3.eth.get_balance(platform_address)
+    balance_eth  = float(blockchain._Web3.from_wei(balance_wei, 'ether'))
+    network_info = blockchain.get_network_info()
+    chain_id     = network_info.get("chain_id")
+
+    etherscan_url = (
+        f"https://sepolia.etherscan.io/address/{platform_address}" if chain_id == 11155111
+        else f"https://etherscan.io/address/{platform_address}"    if chain_id == 1
+        else None
+    )
+
+    warning = None
+    if balance_eth < 0.01:
+        warning = "⚠️ LOW ETH BALANCE — mint and purchase transactions will fail soon. Top up via faucet."
+    elif balance_eth < 0.05:
+        warning = "⚠️ ETH balance getting low — consider topping up soon."
+
+    return {
+        "platform_wallet": {
+            "address":        platform_address,
+            "balance_eth":    balance_eth,
+            "balance_wei":    balance_wei,
+            "etherscan_url":  etherscan_url or "N/A (localhost — no explorer)",
+        },
+        "network": {
+            "chain_id":     chain_id,
+            "block_number": network_info.get("block_number"),
+            "network_name": (
+                "Sepolia Testnet" if chain_id == 11155111
+                else "Ethereum Mainnet" if chain_id == 1
+                else "Local Hardhat"
+            ),
+        },
+        "warning": warning
     }
 

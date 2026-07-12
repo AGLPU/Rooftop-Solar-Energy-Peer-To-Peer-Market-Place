@@ -1,0 +1,2597 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>RoofTop Solar Energy Marketplace - API Docs</title>
+  <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5.17.14/swagger-ui.css" />
+  <style>
+    body { margin: 0; background: #fafafa; }
+    .swagger-ui .topbar .download-url-wrapper { display: none; }
+    /* keep models section always visible */
+    .swagger-ui .model-box { display: block !important; }
+  </style>
+</head>
+<body>
+  <div id="swagger-ui"></div>
+  <script src="https://unpkg.com/swagger-ui-dist@5.17.14/swagger-ui-bundle.js"></script>
+  <script src="https://unpkg.com/swagger-ui-dist@5.17.14/swagger-ui-standalone-preset.js"></script>
+  <script>
+    const spec = {
+  "openapi": "3.1.0",
+  "info": {
+    "title": "RoofTop Solar Energy Marketplace",
+    "description": "### RoofTop Solar Energy \u2014 Peer to Peer Marketplace\n\nA platform where **sellers** list rooftop solar energy and **buyers** purchase energy credits, settled via Ethereum smart contracts.",
+    "version": "1.0.0"
+  },
+  "paths": {
+    "/api/v1/users/register": {
+      "post": {
+        "tags": [
+          "Users"
+        ],
+        "summary": "Register a new user",
+        "description": "Creates a new buyer, seller, or admin account. Optionally link an Ethereum wallet address for P2P energy trading.",
+        "operationId": "register_api_v1_users_register_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserRegisterRequest"
+              },
+              "example": {
+                "email": "seller@example.com",
+                "username": "solar_seller_01",
+                "password": "StrongPass@123",
+                "confirm_password": "string",
+                "full_name": "John Solar",
+                "phone_number": "+1-416-555-0100",
+                "address": "123 Sunny Lane",
+                "city": "Toronto",
+                "country": "Canada",
+                "role": "SELLER",
+                "wallet_address": "0x70997970C51812dc3A010C7d01b50e0d17dc79C8"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/users/login": {
+      "post": {
+        "tags": [
+          "Users"
+        ],
+        "summary": "Login and receive JWT tokens",
+        "operationId": "login_api_v1_users_login_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserLoginRequest"
+              },
+              "example": {
+                "email": "seller@example.com",
+                "password": "StrongPass@123"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/users/me": {
+      "get": {
+        "tags": [
+          "Users"
+        ],
+        "summary": "Get the currently authenticated user",
+        "operationId": "get_me_api_v1_users_me_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/users/": {
+      "get": {
+        "tags": [
+          "Users"
+        ],
+        "summary": "List all users \u2014 Admin only",
+        "operationId": "list_users_api_v1_users__get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "skip",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Skip"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 20,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/UserResponse"
+                  },
+                  "title": "Response List Users Api V1 Users  Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/users/{user_id}": {
+      "get": {
+        "tags": [
+          "Users"
+        ],
+        "summary": "Get user by ID",
+        "operationId": "get_user_api_v1_users__user_id__get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "User Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "Users"
+        ],
+        "summary": "Update profile fields",
+        "operationId": "update_user_api_v1_users__user_id__patch",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "User Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserUpdateRequest"
+              },
+              "example": {
+                "full_name": "John Solar",
+                "phone_number": "+1-416-555-0100",
+                "address": "123 Sunny Lane",
+                "city": "Toronto",
+                "country": "Canada",
+                "wallet_address": "0x70997970C51812dc3A010C7d01b50e0d17dc79C8"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Users"
+        ],
+        "summary": "Permanently delete a user \u2014 Admin only",
+        "operationId": "delete_user_api_v1_users__user_id__delete",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "User Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/users/{user_id}/change-password": {
+      "post": {
+        "tags": [
+          "Users"
+        ],
+        "summary": "Change password",
+        "operationId": "change_password_api_v1_users__user_id__change_password_post",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "User Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangePasswordRequest"
+              },
+              "example": {
+                "current_password": "string",
+                "new_password": "string",
+                "confirm_new_password": "string"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/app__schemas__user__MessageResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/users/{user_id}/deactivate": {
+      "post": {
+        "tags": [
+          "Users"
+        ],
+        "summary": "Deactivate a user account",
+        "operationId": "deactivate_user_api_v1_users__user_id__deactivate_post",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "User Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/listings/": {
+      "post": {
+        "tags": [
+          "Listings"
+        ],
+        "summary": "Create a new energy listing",
+        "description": "Create a solar energy listing for sale.\n\n- **Seller**: creates listing for themselves. Do NOT pass `seller_id`.\n- **Admin (on behalf of seller)**: pass `seller_id` (the seller's user ID) to create for that seller.\n- **Admin (for themselves)**: leave `seller_id` empty \u2014 listing will be created under the admin's own account.",
+        "operationId": "create_listing_api_v1_listings__post",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ListingCreateRequest"
+              },
+              "example": {
+                "energy_kwh": 100,
+                "price_per_kwh": "0.000500",
+                "title": "Rooftop Solar \u2014 100 kWh Available",
+                "description": "Clean solar energy from my rooftop panels in Toronto.",
+                "location": "Toronto, Ontario, Canada",
+                "expires_at": "string",
+                "seller_id": "e8b1769d-e0f1-4703-92d6-b4170b6d3f8c"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListingResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Listings"
+        ],
+        "summary": "Get all listings",
+        "description": "Get all energy listings with optional filters",
+        "operationId": "list_listings_api_v1_listings__get",
+        "parameters": [
+          {
+            "name": "skip",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Skip"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 20,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/ListingStatus"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by status",
+              "title": "Status"
+            },
+            "description": "Filter by status"
+          },
+          {
+            "name": "seller_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by seller",
+              "title": "Seller Id"
+            },
+            "description": "Filter by seller"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ListingResponse"
+                  },
+                  "title": "Response List Listings Api V1 Listings  Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/listings/active": {
+      "get": {
+        "tags": [
+          "Listings"
+        ],
+        "summary": "Get active listings",
+        "description": "Get only active and available energy listings",
+        "operationId": "get_active_listings_api_v1_listings_active_get",
+        "parameters": [
+          {
+            "name": "skip",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Skip"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 20,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ListingResponse"
+                  },
+                  "title": "Response Get Active Listings Api V1 Listings Active Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/listings/my-listings": {
+      "get": {
+        "tags": [
+          "Listings"
+        ],
+        "summary": "Get my listings",
+        "description": "Get all listings created by the current user",
+        "operationId": "get_my_listings_api_v1_listings_my_listings_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "skip",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Skip"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 20,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ListingResponse"
+                  },
+                  "title": "Response Get My Listings Api V1 Listings My Listings Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/listings/{listing_id}": {
+      "get": {
+        "tags": [
+          "Listings"
+        ],
+        "summary": "Get listing by ID",
+        "description": "Get detailed information about a specific listing",
+        "operationId": "get_listing_api_v1_listings__listing_id__get",
+        "parameters": [
+          {
+            "name": "listing_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Listing Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListingResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "Listings"
+        ],
+        "summary": "Update a listing",
+        "description": "Update listing details (owner only)",
+        "operationId": "update_listing_api_v1_listings__listing_id__patch",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "listing_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Listing Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ListingUpdateRequest"
+              },
+              "example": {
+                "price_per_kwh": "0.000500",
+                "title": "Rooftop Solar \u2014 100 kWh Available",
+                "description": "Clean solar energy from my rooftop panels in Toronto.",
+                "location": "Toronto, Ontario, Canada",
+                "expires_at": "string"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListingResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Listings"
+        ],
+        "summary": "Delete a listing",
+        "description": "Delete a listing (only if no purchases)",
+        "operationId": "delete_listing_api_v1_listings__listing_id__delete",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "listing_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Listing Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/app__schemas__listing__MessageResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/listings/{listing_id}/cancel": {
+      "post": {
+        "tags": [
+          "Listings"
+        ],
+        "summary": "Cancel a listing",
+        "description": "Cancel an active listing (owner only)",
+        "operationId": "cancel_listing_api_v1_listings__listing_id__cancel_post",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "listing_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Listing Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListingResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/purchases/": {
+      "post": {
+        "tags": [
+          "Purchases"
+        ],
+        "summary": "Purchase energy",
+        "description": "Buy energy from a listing",
+        "operationId": "create_purchase_api_v1_purchases__post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PurchaseCreateRequest"
+              },
+              "example": {
+                "listing_id": "49720ef4-7372-4e4a-a1c2-85c47bb966a6",
+                "energy_kwh": 100
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PurchaseResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/purchases/{purchase_id}": {
+      "get": {
+        "tags": [
+          "Purchases"
+        ],
+        "summary": "Get purchase by ID",
+        "description": "Get details of a specific purchase",
+        "operationId": "get_purchase_api_v1_purchases__purchase_id__get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "purchase_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Purchase Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PurchaseResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/purchases/my-purchases": {
+      "get": {
+        "tags": [
+          "Purchases"
+        ],
+        "summary": "Get my purchases",
+        "description": "Get all purchases made by the current user",
+        "operationId": "get_my_purchases_api_v1_purchases_my_purchases_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "skip",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Skip"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 20,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PurchaseResponse"
+                  },
+                  "title": "Response Get My Purchases Api V1 Purchases My Purchases Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/purchases/my-sales": {
+      "get": {
+        "tags": [
+          "Purchases"
+        ],
+        "summary": "Get my sales",
+        "description": "Get all sales made by the current user (as seller)",
+        "operationId": "get_my_sales_api_v1_purchases_my_sales_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "skip",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Skip"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 20,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PurchaseResponse"
+                  },
+                  "title": "Response Get My Sales Api V1 Purchases My Sales Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/purchases/{purchase_id}/consume": {
+      "post": {
+        "tags": [
+          "Purchases"
+        ],
+        "summary": "Consume purchased energy",
+        "description": "Buyer marks their purchased energy as consumed.\n\nThis **burns (destroys) the SEC tokens** from the buyer's wallet on the blockchain \u2014 permanent on-chain proof that the solar energy was actually used.\n\n- Purchase must be in **COMPLETED** status.\n- Only the **buyer** of this purchase can call this.\n- This action is **irreversible**.",
+        "operationId": "consume_energy_api_v1_purchases__purchase_id__consume_post",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "purchase_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Purchase Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PurchaseResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/blockchain/status": {
+      "get": {
+        "tags": [
+          "Blockchain"
+        ],
+        "summary": "Blockchain network status",
+        "description": "Check if blockchain is connected and see contract info (token name, symbol, block number).",
+        "operationId": "get_blockchain_status_api_v1_blockchain_status_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/blockchain/balance/{wallet_address}": {
+      "get": {
+        "tags": [
+          "Blockchain"
+        ],
+        "summary": "Get SEC token balance of a wallet",
+        "description": "Returns how many SEC (Solar Energy Credit) tokens a wallet currently holds.\n\n- This is a **free read** \u2014 no gas, no transaction.\n- Balance is in **kWh** (1 SEC token = 1 kWh).\n- Use this to verify that tokens were **minted** to a seller after listing creation.",
+        "operationId": "get_token_balance_api_v1_blockchain_balance__wallet_address__get",
+        "parameters": [
+          {
+            "name": "wallet_address",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Wallet Address"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/blockchain/verify/listing/{listing_id}": {
+      "get": {
+        "tags": [
+          "Blockchain"
+        ],
+        "summary": "Verify a listing on the blockchain",
+        "description": "Check if the SEC tokens were actually minted to the seller's wallet when this listing was created.\n\nShows:\n- The seller's wallet address\n- The mint transaction hash (stored in DB)\n- Current token balance of the seller\n- Total energy ever produced by the seller",
+        "operationId": "verify_listing_on_blockchain_api_v1_blockchain_verify_listing__listing_id__get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "listing_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Listing Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/blockchain/verify/purchase/{purchase_id}": {
+      "get": {
+        "tags": [
+          "Blockchain"
+        ],
+        "summary": "Verify a purchase on the blockchain",
+        "description": "Check if the SEC tokens were actually transferred from seller \u2192 buyer when this purchase was made.\n\nShows:\n- Seller and buyer wallet addresses\n- Purchase transaction hash\n- Current token balances of both seller and buyer\n- Consume transaction hash (if energy was consumed/burned)",
+        "operationId": "verify_purchase_on_blockchain_api_v1_blockchain_verify_purchase__purchase_id__get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "purchase_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Purchase Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/blockchain/admin/wallet/{wallet_address}": {
+      "get": {
+        "tags": [
+          "Blockchain"
+        ],
+        "summary": "[Admin] Full blockchain summary for a wallet",
+        "description": "Admin-only endpoint.\n\nReturns complete blockchain history for any wallet:\n- Current SEC token balance\n- Total energy ever produced (as seller)\n- Total energy ever consumed (as buyer)",
+        "operationId": "admin_wallet_summary_api_v1_blockchain_admin_wallet__wallet_address__get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "wallet_address",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Wallet Address"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/": {
+      "get": {
+        "tags": [
+          "Root"
+        ],
+        "summary": "Root",
+        "description": "Welcome endpoint - shows API information",
+        "operationId": "root__get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/health": {
+      "get": {
+        "tags": [
+          "Health"
+        ],
+        "summary": "Health",
+        "description": "Check if the API and database are working",
+        "operationId": "health_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ChangePasswordRequest": {
+        "properties": {
+          "current_password": {
+            "type": "string",
+            "title": "Current Password"
+          },
+          "new_password": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 8,
+            "title": "New Password"
+          },
+          "confirm_new_password": {
+            "type": "string",
+            "title": "Confirm New Password"
+          }
+        },
+        "type": "object",
+        "required": [
+          "current_password",
+          "new_password",
+          "confirm_new_password"
+        ],
+        "title": "ChangePasswordRequest",
+        "example": {
+          "current_password": "string",
+          "new_password": "string",
+          "confirm_new_password": "string"
+        }
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError",
+        "example": {
+          "detail": "string"
+        }
+      },
+      "ListingCreateRequest": {
+        "properties": {
+          "energy_kwh": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Energy Kwh",
+            "description": "Amount of energy in kWh"
+          },
+          "price_per_kwh": {
+            "anyOf": [
+              {
+                "type": "number",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "title": "Price Per Kwh",
+            "description": "Price per kWh in ETH"
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 5,
+            "title": "Title",
+            "description": "Listing title"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description",
+            "description": "Listing description"
+          },
+          "location": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Location",
+            "description": "Energy production location"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At",
+            "description": "When listing expires"
+          },
+          "seller_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seller Id",
+            "description": "[Admin only] Target seller's user ID"
+          }
+        },
+        "type": "object",
+        "required": [
+          "energy_kwh",
+          "price_per_kwh",
+          "title"
+        ],
+        "title": "ListingCreateRequest",
+        "description": "Request to create a new energy listing",
+        "example": {
+          "energy_kwh": 100,
+          "price_per_kwh": "0.000500",
+          "title": "Rooftop Solar \u2014 100 kWh Available",
+          "description": "Clean solar energy from my rooftop panels in Toronto.",
+          "location": "Toronto, Ontario, Canada",
+          "expires_at": "string",
+          "seller_id": "e8b1769d-e0f1-4703-92d6-b4170b6d3f8c"
+        }
+      },
+      "ListingResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "seller_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Seller Id"
+          },
+          "energy_kwh": {
+            "type": "integer",
+            "title": "Energy Kwh"
+          },
+          "price_per_kwh": {
+            "type": "string",
+            "title": "Price Per Kwh"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "location": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Location"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "blockchain_tx_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Blockchain Tx Hash"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "total_price": {
+            "type": "number",
+            "title": "Total Price"
+          },
+          "is_available": {
+            "type": "boolean",
+            "title": "Is Available"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "seller_id",
+          "energy_kwh",
+          "price_per_kwh",
+          "title",
+          "description",
+          "location",
+          "status",
+          "blockchain_tx_hash",
+          "created_at",
+          "updated_at",
+          "expires_at",
+          "total_price",
+          "is_available"
+        ],
+        "title": "ListingResponse",
+        "description": "Response for a single listing",
+        "example": {
+          "id": "8482d21e-adec-4028-b8c8-ef9a1a363e9a",
+          "seller_id": "e8b1769d-e0f1-4703-92d6-b4170b6d3f8c",
+          "energy_kwh": 100,
+          "price_per_kwh": "0.000500",
+          "title": "Rooftop Solar \u2014 100 kWh Available",
+          "description": "Clean solar energy from my rooftop panels in Toronto.",
+          "location": "Toronto, Ontario, Canada",
+          "status": "active",
+          "blockchain_tx_hash": "0xabc123def456...",
+          "created_at": "2026-07-10T16:09:25.145775+00:00",
+          "updated_at": "2026-07-10T16:09:25.145775+00:00",
+          "expires_at": "string",
+          "total_price": "50.000000",
+          "is_available": true
+        }
+      },
+      "ListingStatus": {
+        "type": "string",
+        "enum": [
+          "active",
+          "sold",
+          "expired",
+          "cancelled"
+        ],
+        "title": "ListingStatus",
+        "description": "Status of energy listing",
+        "example": "active"
+      },
+      "ListingUpdateRequest": {
+        "properties": {
+          "price_per_kwh": {
+            "anyOf": [
+              {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "string"
+                  }
+                ],
+                "gt": 0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Price Per Kwh",
+            "description": "New price per kWh"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200,
+                "minLength": 5
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "location": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Location"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          }
+        },
+        "type": "object",
+        "title": "ListingUpdateRequest",
+        "description": "Request to update an existing listing",
+        "example": {
+          "price_per_kwh": "0.000500",
+          "title": "Rooftop Solar \u2014 100 kWh Available",
+          "description": "Clean solar energy from my rooftop panels in Toronto.",
+          "location": "Toronto, Ontario, Canada",
+          "expires_at": "string"
+        }
+      },
+      "PurchaseCreateRequest": {
+        "properties": {
+          "listing_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Listing Id",
+            "description": "ID of the listing to purchase from"
+          },
+          "energy_kwh": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Energy Kwh",
+            "description": "Amount of energy to purchase in kWh"
+          }
+        },
+        "type": "object",
+        "required": [
+          "listing_id",
+          "energy_kwh"
+        ],
+        "title": "PurchaseCreateRequest",
+        "description": "Request to purchase energy from a listing",
+        "example": {
+          "listing_id": "49720ef4-7372-4e4a-a1c2-85c47bb966a6",
+          "energy_kwh": 100
+        }
+      },
+      "PurchaseResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "buyer_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Buyer Id"
+          },
+          "seller_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Seller Id"
+          },
+          "listing_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Listing Id"
+          },
+          "energy_kwh": {
+            "type": "integer",
+            "title": "Energy Kwh"
+          },
+          "price_per_kwh": {
+            "type": "string",
+            "title": "Price Per Kwh"
+          },
+          "total_price": {
+            "type": "string",
+            "title": "Total Price"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "blockchain_tx_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Blockchain Tx Hash"
+          },
+          "consume_tx_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Consume Tx Hash"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
+          "consumed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Consumed At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "buyer_id",
+          "seller_id",
+          "listing_id",
+          "energy_kwh",
+          "price_per_kwh",
+          "total_price",
+          "status",
+          "blockchain_tx_hash",
+          "consume_tx_hash",
+          "created_at",
+          "completed_at",
+          "consumed_at"
+        ],
+        "title": "PurchaseResponse",
+        "description": "Response for a purchase transaction",
+        "example": {
+          "id": "8482d21e-adec-4028-b8c8-ef9a1a363e9a",
+          "buyer_id": "f5355154-61bc-45f1-be4b-0aab0ba759ed",
+          "seller_id": "e8b1769d-e0f1-4703-92d6-b4170b6d3f8c",
+          "listing_id": "49720ef4-7372-4e4a-a1c2-85c47bb966a6",
+          "energy_kwh": 100,
+          "price_per_kwh": "0.000500",
+          "total_price": "50.000000",
+          "status": "active",
+          "blockchain_tx_hash": "0xabc123def456...",
+          "consume_tx_hash": "0xdef789abc012...",
+          "created_at": "2026-07-10T16:09:25.145775+00:00",
+          "completed_at": "string",
+          "consumed_at": "string"
+        }
+      },
+      "TokenResponse": {
+        "properties": {
+          "access_token": {
+            "type": "string",
+            "title": "Access Token"
+          },
+          "refresh_token": {
+            "type": "string",
+            "title": "Refresh Token"
+          },
+          "token_type": {
+            "type": "string",
+            "title": "Token Type",
+            "default": "bearer"
+          },
+          "expires_in": {
+            "type": "integer",
+            "title": "Expires In"
+          },
+          "user": {
+            "$ref": "#/components/schemas/UserResponse"
+          }
+        },
+        "type": "object",
+        "required": [
+          "access_token",
+          "refresh_token",
+          "expires_in",
+          "user"
+        ],
+        "title": "TokenResponse",
+        "description": "Returned on successful login",
+        "example": {
+          "access_token": "string",
+          "refresh_token": "string",
+          "token_type": "bearer",
+          "expires_in": 1,
+          "user": "string"
+        }
+      },
+      "UserLoginRequest": {
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email",
+            "title": "Email",
+            "examples": [
+              "alice@solar.io"
+            ]
+          },
+          "password": {
+            "type": "string",
+            "title": "Password",
+            "examples": [
+              "Str0ng!Pass"
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "email",
+          "password"
+        ],
+        "title": "UserLoginRequest",
+        "description": "Payload for POST /users/login",
+        "example": {
+          "email": "seller@example.com",
+          "password": "StrongPass@123"
+        }
+      },
+      "UserRegisterRequest": {
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email",
+            "title": "Email",
+            "examples": [
+              "alice@solar.io"
+            ]
+          },
+          "username": {
+            "type": "string",
+            "maxLength": 50,
+            "minLength": 3,
+            "title": "Username",
+            "examples": [
+              "alice_solar"
+            ]
+          },
+          "password": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 8,
+            "title": "Password",
+            "examples": [
+              "Str0ng!Pass"
+            ]
+          },
+          "confirm_password": {
+            "type": "string",
+            "title": "Confirm Password",
+            "examples": [
+              "Str0ng!Pass"
+            ]
+          },
+          "full_name": {
+            "type": "string",
+            "maxLength": 255,
+            "minLength": 2,
+            "title": "Full Name",
+            "examples": [
+              "Alice Dupont"
+            ]
+          },
+          "phone_number": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 20
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phone Number",
+            "examples": [
+              "+1-514-555-0100"
+            ]
+          },
+          "address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Address",
+            "examples": [
+              "123 Solar St"
+            ]
+          },
+          "city": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 100
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "City",
+            "examples": [
+              "Montreal"
+            ]
+          },
+          "country": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 100
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Country",
+            "default": "Canada"
+          },
+          "role": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/UserRole"
+              }
+            ],
+            "default": "BUYER",
+            "examples": [
+              "SELLER"
+            ]
+          },
+          "wallet_address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Wallet Address",
+            "examples": [
+              "0xAbCd...1234"
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "email",
+          "username",
+          "password",
+          "confirm_password",
+          "full_name"
+        ],
+        "title": "UserRegisterRequest",
+        "description": "Payload for POST /users/register",
+        "example": {
+          "email": "seller@example.com",
+          "username": "solar_seller_01",
+          "password": "StrongPass@123",
+          "confirm_password": "string",
+          "full_name": "John Solar",
+          "phone_number": "+1-416-555-0100",
+          "address": "123 Sunny Lane",
+          "city": "Toronto",
+          "country": "Canada",
+          "role": "SELLER",
+          "wallet_address": "0x70997970C51812dc3A010C7d01b50e0d17dc79C8"
+        }
+      },
+      "UserResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "title": "Email"
+          },
+          "username": {
+            "type": "string",
+            "title": "Username"
+          },
+          "full_name": {
+            "type": "string",
+            "title": "Full Name"
+          },
+          "phone_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phone Number"
+          },
+          "address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Address"
+          },
+          "city": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "City"
+          },
+          "country": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Country"
+          },
+          "role": {
+            "$ref": "#/components/schemas/UserRole"
+          },
+          "status": {
+            "$ref": "#/components/schemas/UserStatus"
+          },
+          "wallet_address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Wallet Address"
+          },
+          "is_verified": {
+            "type": "boolean",
+            "title": "Is Verified"
+          },
+          "is_active": {
+            "type": "boolean",
+            "title": "Is Active"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          },
+          "last_login_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Login At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "email",
+          "username",
+          "full_name",
+          "phone_number",
+          "address",
+          "city",
+          "country",
+          "role",
+          "status",
+          "wallet_address",
+          "is_verified",
+          "is_active",
+          "created_at",
+          "updated_at",
+          "last_login_at"
+        ],
+        "title": "UserResponse",
+        "description": "Returned for single-user endpoints",
+        "example": {
+          "id": "8482d21e-adec-4028-b8c8-ef9a1a363e9a",
+          "email": "seller@example.com",
+          "username": "solar_seller_01",
+          "full_name": "John Solar",
+          "phone_number": "+1-416-555-0100",
+          "address": "123 Sunny Lane",
+          "city": "Toronto",
+          "country": "Canada",
+          "role": "SELLER",
+          "status": "active",
+          "wallet_address": "0x70997970C51812dc3A010C7d01b50e0d17dc79C8",
+          "is_verified": true,
+          "is_active": true,
+          "created_at": "2026-07-10T16:09:25.145775+00:00",
+          "updated_at": "2026-07-10T16:09:25.145775+00:00",
+          "last_login_at": "string"
+        }
+      },
+      "UserRole": {
+        "type": "string",
+        "enum": [
+          "BUYER",
+          "SELLER",
+          "ADMIN"
+        ],
+        "title": "UserRole",
+        "example": "BUYER"
+      },
+      "UserStatus": {
+        "type": "string",
+        "enum": [
+          "ACTIVE",
+          "INACTIVE",
+          "BANNED"
+        ],
+        "title": "UserStatus",
+        "example": "ACTIVE"
+      },
+      "UserUpdateRequest": {
+        "properties": {
+          "full_name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 255,
+                "minLength": 2
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Full Name"
+          },
+          "phone_number": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 20
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phone Number"
+          },
+          "address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Address"
+          },
+          "city": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 100
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "City"
+          },
+          "country": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 100
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Country"
+          },
+          "wallet_address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Wallet Address"
+          }
+        },
+        "type": "object",
+        "title": "UserUpdateRequest",
+        "description": "Payload for PATCH /users/{id}  \u2014 all fields optional",
+        "example": {
+          "full_name": "John Solar",
+          "phone_number": "+1-416-555-0100",
+          "address": "123 Sunny Lane",
+          "city": "Toronto",
+          "country": "Canada",
+          "wallet_address": "0x70997970C51812dc3A010C7d01b50e0d17dc79C8"
+        }
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "example": {
+          "loc": "string",
+          "msg": "string",
+          "type": "string"
+        }
+      },
+      "app__schemas__listing__MessageResponse": {
+        "properties": {
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "message"
+        ],
+        "title": "MessageResponse",
+        "description": "Generic message response",
+        "example": {
+          "message": "Operation completed successfully"
+        }
+      },
+      "app__schemas__user__MessageResponse": {
+        "properties": {
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "message"
+        ],
+        "title": "MessageResponse",
+        "example": {
+          "message": "Operation completed successfully"
+        }
+      }
+    },
+    "securitySchemes": {
+      "OAuth2PasswordBearer": {
+        "type": "oauth2",
+        "flows": {
+          "password": {
+            "scopes": {},
+            "tokenUrl": "/api/v1/users/login"
+          }
+        }
+      }
+    }
+  }
+};
+
+    window.onload = function () {
+      SwaggerUIBundle({
+        spec: spec,
+        dom_id: "#swagger-ui",
+        presets: [
+          SwaggerUIBundle.presets.apis,
+          SwaggerUIStandalonePreset
+        ],
+        layout: "StandaloneLayout",
+        deepLinking: true,
+        displayRequestDuration: true,
+        defaultModelsExpandDepth: 5,
+        defaultModelExpandDepth: 5,
+        defaultModelRendering: "example",
+        showExtensions: true,
+        showCommonExtensions: true,
+        tryItOutEnabled: true,
+        persistAuthorization: true,
+        validatorUrl: null,
+        requestSnippetsEnabled: true,
+      });
+    };
+  </script>
+</body>
+</html>
