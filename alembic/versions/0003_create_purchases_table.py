@@ -27,9 +27,9 @@ def upgrade() -> None:
         sa.Column("total_price", sa.Numeric(12, 6), nullable=False),
         sa.Column(
             "status",
-            sa.Enum("pending", "completed", "failed", "refunded", "consumed", name="purchasestatus"),
+            sa.Enum("PENDING", "COMPLETED", "FAILED", "REFUNDED", "CONSUMED", name="purchasestatus"),
             nullable=False,
-            server_default="pending",
+            server_default="PENDING",
         ),
         sa.Column("blockchain_tx_hash", sa.String(66), nullable=True),
         sa.Column("consume_tx_hash", sa.String(66), nullable=True),

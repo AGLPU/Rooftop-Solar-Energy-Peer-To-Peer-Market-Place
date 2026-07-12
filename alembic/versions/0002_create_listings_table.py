@@ -27,9 +27,9 @@ def upgrade() -> None:
         sa.Column("location", sa.String(200), nullable=True),
         sa.Column(
             "status",
-            sa.Enum("active", "sold", "expired", "cancelled", name="listingstatus"),
+            sa.Enum("ACTIVE", "SOLD", "EXPIRED", "CANCELLED", name="listingstatus"),
             nullable=False,
-            server_default="active",
+            server_default="ACTIVE",
         ),
         sa.Column("blockchain_tx_hash", sa.String(66), nullable=True),
         sa.Column("created_at", sa.DateTime, nullable=False, server_default=sa.func.now()),

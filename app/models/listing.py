@@ -13,10 +13,10 @@ settings = get_settings()
 
 class ListingStatus(str, enum.Enum):
     """Status of energy listing"""
-    ACTIVE = "active"
-    SOLD = "sold"
-    EXPIRED = "expired"
-    CANCELLED = "cancelled"
+    ACTIVE = "ACTIVE"
+    SOLD = "SOLD"
+    EXPIRED = "EXPIRED"
+    CANCELLED = "CANCELLED"
 
 
 class Listing(Base):

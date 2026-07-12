@@ -13,11 +13,11 @@ settings = get_settings()
 
 class PurchaseStatus(str, enum.Enum):
     """Status of energy purchase"""
-    PENDING = "pending"
-    COMPLETED = "completed"
-    FAILED = "failed"
-    REFUNDED = "refunded"
-    CONSUMED = "consumed"  # Buyer has burned the SEC tokens — energy actually used
+    PENDING = "PENDING"
+    COMPLETED = "COMPLETED"
+    FAILED = "FAILED"
+    REFUNDED = "REFUNDED"
+    CONSUMED = "CONSUMED"  # Buyer has burned the SEC tokens — energy actually used
 
 
 class Purchase(Base):
