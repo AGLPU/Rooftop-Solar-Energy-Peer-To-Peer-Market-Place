@@ -19,7 +19,8 @@ if config.config_file_name is not None:
 # override URL from env if present (handy for CI / RDS)
 from app.config import get_settings
 settings = get_settings()
-config.set_main_option("sqlalchemy.url", settings.database_url)
+# db_url is a computed property that works with both DATABASE_URL and DATABASE_HOST style configs
+config.set_main_option("sqlalchemy.url", settings.db_url)
 
 target_metadata = Base.metadata
 
