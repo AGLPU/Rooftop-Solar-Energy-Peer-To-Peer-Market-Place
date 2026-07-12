@@ -73,18 +73,12 @@ class BlockchainService:
             logger.warning("No contract address configured")
             return
 
-        # ABI lives in the sibling solar-blockchain project
-        # rooftop-solar-marketplace/  ← this project
-        # solar-blockchain/           ← sibling blockchain project
+        # ABI is bundled inside this project at app/blockchain/EnergyToken.json
+        # This makes the project self-contained and deployable to Render/cloud
         abi_path = (
-            Path(__file__).parent  # services/
-            .parent                # app/
-            .parent                # rooftop-solar-marketplace/
-            .parent                # hackathon/
-            / "energy-token-blockchain"
-            / "artifacts"
-            / "contracts"
-            / "EnergyToken.sol"
+            Path(__file__).parent   # services/
+            .parent                 # app/
+            / "blockchain"
             / "EnergyToken.json"
         )
 
