@@ -2,8 +2,7 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
-      <module fileurl="file://$PROJECT_DIR$/.idea/rooftop-solar-marketplace.iml" filepath="$PROJECT_DIR$/.idea/rooftop-solar-marketplace.iml" />
+      <module fileurl="file://$PROJECT_DIR$/../energy-token-blockchain/energy-token-blockchain.iml" filepath="$PROJECT_DIR$/../energy-token-blockchain/energy-token-blockchain.iml" />
     </modules>
   </component>
 </project>
-

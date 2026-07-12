@@ -7,6 +7,7 @@ ABI file path (generated after 'npm run compile' in solar-blockchain/):
 """
 from decimal import Decimal
 from typing import Optional, Dict, Any
+import hashlib
 import json
 import logging
 from pathlib import Path
@@ -25,7 +26,7 @@ class BlockchainService:
         self._Web3 = None
         self.contract = None
         self.contract_address: Optional[str] = None
-        self.is_connected = FalseC
+        self.is_connected = False
 
         try:
             self._initialize_connection()
@@ -80,7 +81,7 @@ class BlockchainService:
             .parent                # app/
             .parent                # rooftop-solar-marketplace/
             .parent                # hackathon/
-            / "solar-blockchain"
+            / "energy-token-blockchain"
             / "artifacts"
             / "contracts"
             / "EnergyToken.sol"
@@ -115,6 +116,32 @@ class BlockchainService:
         """Check if blockchain service is available"""
         return self.is_connected and self.contract is not None
 
+    @staticmethod
+    def compute_listing_hash(listing) -> str:
+        """
+        Compute a SHA256 hash of ALL listing fields.
+        This is stored on-chain at mint time.
+        Any DB field change will produce a different hash → tamper detected.
+
+        Fields included: id, seller_id, energy_kwh, price_per_kwh, title,
+                         description, location, status, expires_at, created_at
+        """
+        data = {
+            "id":            str(listing.id),
+            "seller_id":     str(listing.seller_id),
+            "energy_kwh":    int(listing.energy_kwh),
+            "price_per_kwh": str(listing.price_per_kwh),
+            "title":         listing.title,
+            "description":   listing.description or "",
+            "location":      listing.location or "",
+            "status":        str(listing.status.value if hasattr(listing.status, 'value') else listing.status),
+            "expires_at":    listing.expires_at.isoformat() if listing.expires_at else "",
+            "created_at":    listing.created_at.isoformat() if listing.created_at else "",
+        }
+        # Sort keys for deterministic ordering
+        canonical = json.dumps(data, sort_keys=True, separators=(',', ':'))
+        return hashlib.sha256(canonical.encode()).hexdigest()
+
     def get_account(self) -> Optional[str]:
         """Get platform account address"""
         if not self.is_available():
@@ -131,7 +158,9 @@ class BlockchainService:
         self,
         seller_address: str,
         energy_kwh: int,
-        metadata: str = ""
+        price_per_kwh: Decimal,
+        listing_id: str = "",
+        listing_hash: str = ""
     ) -> Optional[str]:
         """
         Mint energy tokens for a seller
@@ -139,7 +168,9 @@ class BlockchainService:
         Args:
             seller_address: Ethereum address of the seller
             energy_kwh: Amount of energy produced in kWh
-            metadata: Additional information (listing ID, date, etc.)
+            price_per_kwh: Price per kWh (stored on-chain as micro-units * 1e6)
+            listing_id: DB listing UUID — stored on-chain for tamper detection
+            listing_hash: SHA256 of ALL listing fields — covers every DB field
 
         Returns:
             Transaction hash or None if blockchain unavailable
@@ -149,7 +180,6 @@ class BlockchainService:
             return None
 
         try:
-            # Get platform account
             private_key = getattr(settings, 'blockchain_private_key', None)
             if not private_key:
                 logger.error("No private key configured")
@@ -157,29 +187,33 @@ class BlockchainService:
 
             account = self.w3.eth.account.from_key(private_key)
 
-            # Build transaction
+            # Convert price to micro-units (avoid floats in Solidity)
+            price_micro = int(Decimal(str(price_per_kwh)) * Decimal("1000000"))
+
+            # Convert hex hash string to bytes32
+            hash_bytes = bytes.fromhex(listing_hash) if listing_hash else bytes(32)
+
             nonce = self.w3.eth.get_transaction_count(account.address)
 
             transaction = self.contract.functions.mintEnergy(
                 self._Web3.to_checksum_address(seller_address),
                 energy_kwh,
-                metadata
+                price_micro,
+                listing_id,
+                hash_bytes
             ).build_transaction({
                 'from': account.address,
                 'nonce': nonce,
-                'gas': 200000,
+                'gas': 300000,
                 'gasPrice': self.w3.eth.gas_price,
             })
 
-            # Sign and send transaction
             signed_txn = self.w3.eth.account.sign_transaction(transaction, private_key)
-            tx_hash = self.w3.eth.send_raw_transaction(signed_txn.rawTransaction)
-
-            # Wait for confirmation
+            tx_hash = self.w3.eth.send_raw_transaction(signed_txn.raw_transaction)
             tx_receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash)
 
             if tx_receipt['status'] == 1:
-                logger.info(f"✅ Energy minted: {energy_kwh} kWh to {seller_address}")
+                logger.info(f"✅ Energy minted: {energy_kwh} kWh @ {price_per_kwh}/kWh to {seller_address}")
                 return tx_hash.hex()
             else:
                 logger.error(f"❌ Transaction failed: {tx_hash.hex()}")
@@ -251,6 +285,29 @@ class BlockchainService:
             logger.error(f"Error recording purchase: {e}")
             return None
 
+    def get_listing_record(self, listing_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Retrieve the immutable on-chain snapshot of a listing.
+        Returns seller, energyKwh, pricePerKwh, and the full listing hash.
+        """
+        if not self.is_available():
+            return None
+        try:
+            seller, energy_kwh, price_micro, listing_hash_bytes, exists = \
+                self.contract.functions.getListingRecord(listing_id).call()
+            if not exists:
+                return None
+            return {
+                "seller":         seller,
+                "energy_kwh":     energy_kwh,
+                "price_per_kwh":  Decimal(price_micro) / Decimal("1000000"),
+                "price_micro":    price_micro,
+                "listing_hash":   listing_hash_bytes.hex(),
+            }
+        except Exception as e:
+            logger.error(f"Error getting listing record: {e}")
+            return None
+
     def get_energy_balance(self, address: str) -> Optional[int]:
         """Get energy token balance for an address (in kWh)"""
         if not self.is_available():
@@ -263,6 +320,119 @@ class BlockchainService:
             return balance
         except Exception as e:
             logger.error(f"Error getting balance: {e}")
+            return None
+
+    def consume_energy_for(
+        self,
+        buyer_address: str,
+        energy_kwh: int
+    ) -> Optional[str]:
+        """
+        Burn SEC tokens for a buyer when they consume the energy.
+        Calls consumeEnergyFor() — an owner-only function on the contract.
+        Backend (Account #0) signs this on behalf of the buyer.
+
+        Args:
+            buyer_address: Buyer's Ethereum wallet address
+            energy_kwh:    Amount of energy consumed in kWh (tokens to burn)
+
+        Returns:
+            Transaction hash or None if blockchain unavailable
+        """
+        if not self.is_available():
+            logger.info("Blockchain unavailable - skipping consume energy")
+            return None
+
+        try:
+            private_key = getattr(settings, 'blockchain_private_key', None)
+            if not private_key:
+                logger.error("No private key configured")
+                return None
+
+            account = self.w3.eth.account.from_key(private_key)
+            nonce = self.w3.eth.get_transaction_count(account.address)
+
+            transaction = self.contract.functions.consumeEnergyFor(
+                self._Web3.to_checksum_address(buyer_address),
+                energy_kwh
+            ).build_transaction({
+                'from': account.address,
+                'nonce': nonce,
+                'gas': 150000,
+                'gasPrice': self.w3.eth.gas_price,
+            })
+
+            signed_txn = self.w3.eth.account.sign_transaction(transaction, private_key)
+            tx_hash = self.w3.eth.send_raw_transaction(signed_txn.rawTransaction)
+            tx_receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash)
+
+            if tx_receipt['status'] == 1:
+                logger.info(f"✅ Energy consumed (burned): {energy_kwh} kWh from {buyer_address}")
+                return tx_hash.hex()
+            else:
+                logger.error(f"❌ Consume energy transaction failed: {tx_hash.hex()}")
+                return None
+
+        except Exception as e:
+            logger.error(f"Error consuming energy: {e}")
+            return None
+
+    # ─── Admin Read-Only Methods ──────────────────────────────────────────────
+    # Admin has NO wallet, NO private key, makes NO transactions.
+    # All methods below are FREE eth_call reads — no gas, no signing.
+
+    def get_energy_produced(self, seller_address: str) -> Optional[int]:
+        """
+        [ADMIN / READ-ONLY]
+        Total kWh ever produced (minted) for a seller address.
+        """
+        if not self.is_available():
+            return None
+        try:
+            return self.contract.functions.getEnergyProduced(
+                self._Web3.to_checksum_address(seller_address)
+            ).call()
+        except Exception as e:
+            logger.error(f"Error getting energy produced: {e}")
+            return None
+
+    def get_energy_consumed(self, buyer_address: str) -> Optional[int]:
+        """
+        [ADMIN / READ-ONLY]
+        Total kWh ever consumed (burned) by a buyer address.
+        """
+        if not self.is_available():
+            return None
+        try:
+            return self.contract.functions.getEnergyConsumed(
+                self._Web3.to_checksum_address(buyer_address)
+            ).call()
+        except Exception as e:
+            logger.error(f"Error getting energy consumed: {e}")
+            return None
+
+    def get_transaction_info(self, tx_hash: str) -> Optional[Dict[str, Any]]:
+        """
+        [ADMIN / READ-ONLY]
+        Fetch blockchain transaction details by hash.
+        Useful for admin to verify a specific purchase transaction.
+        """
+        if not self.is_available():
+            return None
+        try:
+            receipt = self.w3.eth.get_transaction_receipt(tx_hash)
+            if receipt:
+                return {
+                    "tx_hash": tx_hash,
+                    "block_number": receipt["blockNumber"],
+                    "status": "success" if receipt["status"] == 1 else "failed",
+                    "gas_used": receipt["gasUsed"],
+                    "from": receipt["from"],
+                    "to": receipt["to"],
+                }
+            return None
+        except Exception as e:
+            logger.error(f"Error getting transaction info: {e}")
             return None
 
     def get_network_info(self) -> Dict[str, Any]:

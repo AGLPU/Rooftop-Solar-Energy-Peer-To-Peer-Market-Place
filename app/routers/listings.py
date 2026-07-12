@@ -14,7 +14,7 @@ from app.schemas.listing import (
     MessageResponse
 )
 from app.services.listing_service import ListingService, get_listing_service
-from app.utils.auth import get_current_active_user
+from app.utils.auth import get_current_active_user, require_admin
 
 router = APIRouter(prefix="/listings", tags=["Listings"])
 
@@ -26,7 +26,12 @@ router = APIRouter(prefix="/listings", tags=["Listings"])
     response_model=ListingResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Create a new energy listing",
-    description="Sellers can list their solar energy for sale"
+    description=(
+        "Create a solar energy listing for sale.\n\n"
+        "- **Seller**: creates listing for themselves. Do NOT pass `seller_id`.\n"
+        "- **Admin (on behalf of seller)**: pass `seller_id` (the seller's user ID) to create for that seller.\n"
+        "- **Admin (for themselves)**: leave `seller_id` empty — listing will be created under the admin's own account."
+    )
 )
 def create_listing(
     payload: ListingCreateRequest,

@@ -17,6 +17,7 @@ class PurchaseStatus(str, enum.Enum):
     COMPLETED = "completed"
     FAILED = "failed"
     REFUNDED = "refunded"
+    CONSUMED = "consumed"  # Buyer has burned the SEC tokens — energy actually used
 
 
 class Purchase(Base):
@@ -43,11 +44,13 @@ class Purchase(Base):
     status = Column(SQLEnum(PurchaseStatus), default=PurchaseStatus.PENDING, nullable=False)
 
     # Blockchain
-    blockchain_tx_hash = Column(String(66), nullable=True)  # Ethereum transaction hash
+    blockchain_tx_hash = Column(String(66), nullable=True)  # Ethereum transaction hash (purchase)
+    consume_tx_hash = Column(String(66), nullable=True)      # Ethereum transaction hash (burn)
 
     # Timestamps
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    completed_at = Column(DateTime, nullable=True)  # When transaction completed
+    completed_at = Column(DateTime, nullable=True)   # When purchase completed
+    consumed_at = Column(DateTime, nullable=True)    # When energy was consumed (tokens burned)
 
     # Relationships
     buyer = relationship("User", foreign_keys=[buyer_id], back_populates="purchases")

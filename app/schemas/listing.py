@@ -13,6 +13,8 @@ class ListingCreateRequest(BaseModel):
     description: Optional[str] = Field(None, max_length=1000, description="Listing description")
     location: Optional[str] = Field(None, max_length=200, description="Energy production location")
     expires_at: Optional[datetime] = Field(None, description="When listing expires")
+    # Admin-only field: specify which seller to create this listing for
+    seller_id: Optional[UUID] = Field(None, description="[Admin only] Target seller's user ID")
 
 
 class ListingUpdateRequest(BaseModel):

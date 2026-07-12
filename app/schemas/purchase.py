@@ -21,9 +21,11 @@ class PurchaseResponse(BaseModel):
     price_per_kwh: Decimal
     total_price: Decimal
     status: str
-    blockchain_tx_hash: Optional[str]
+    blockchain_tx_hash: Optional[str]   # tx hash when tokens were transferred (purchase)
+    consume_tx_hash: Optional[str]      # tx hash when tokens were burned (consumed)
     created_at: datetime
     completed_at: Optional[datetime]
+    consumed_at: Optional[datetime]
 
     model_config = ConfigDict(from_attributes=True)
 

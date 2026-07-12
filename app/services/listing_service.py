@@ -7,6 +7,7 @@ from typing import List, Optional
 from app.models.listing import Listing, ListingStatus
 from app.models.user import User, UserRole
 from app.schemas.listing import ListingCreateRequest, ListingUpdateRequest
+from app.services.blockchain_service import get_blockchain_service
 
 
 class ListingService:
@@ -16,22 +17,46 @@ class ListingService:
         self,
         db: Session,
         payload: ListingCreateRequest,
-        seller: User
+        current_user: User
     ) -> Listing:
-        """Create a new energy listing"""
+        """Create a new energy listing.
 
-        # Verify seller role
-        if seller.role not in [UserRole.SELLER, UserRole.ADMIN]:
+        - SELLER: creates a listing for themselves.
+        - ADMIN: must supply payload.seller_id to create on behalf of that seller.
+        """
+
+        # ── Determine the actual seller ────────────────────────────────────
+        if current_user.role == UserRole.ADMIN:
+            if payload.seller_id:
+                # Admin creating ON BEHALF of a specific seller
+                seller = db.query(User).filter(User.id == payload.seller_id).first()
+                if not seller:
+                    raise HTTPException(
+                        status_code=status.HTTP_404_NOT_FOUND,
+                        detail="Seller not found"
+                    )
+                if seller.role != UserRole.SELLER:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail="Target user is not a seller"
+                    )
+            else:
+                # Admin creating FOR THEMSELVES (no seller_id provided)
+                seller = current_user
+        elif current_user.role == UserRole.SELLER:
+            # Seller always creates for themselves
+            seller = current_user
+        else:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Only sellers can create listings"
+                detail="Only sellers or admins can create listings"
             )
 
         # Verify seller has wallet address
         if not seller.wallet_address:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Seller must have a wallet address to create listings"
+                detail=f"Seller '{seller.username}' must have a wallet address to create listings"
             )
 
         # Create listing
@@ -49,6 +74,21 @@ class ListingService:
         db.add(listing)
         db.commit()
         db.refresh(listing)
+
+        # ── Blockchain: Mint SEC tokens to seller ──────────────────────────
+        blockchain = get_blockchain_service()
+        listing_hash = blockchain.compute_listing_hash(listing)
+        tx_hash = blockchain.mint_energy(
+            seller_address=seller.wallet_address,
+            energy_kwh=listing.energy_kwh,
+            price_per_kwh=listing.price_per_kwh,
+            listing_id=str(listing.id),
+            listing_hash=listing_hash
+        )
+        if tx_hash:
+            listing.blockchain_tx_hash = tx_hash
+            db.commit()
+            db.refresh(listing)
 
         return listing
 

@@ -85,3 +85,28 @@ def get_my_sales(
 ):
     return svc.get_user_sales(db, current_user.id, skip=skip, limit=limit)
 
+
+# ─── Consume Energy (Burn Tokens) ────────────────────────────────────────────
+
+@router.post(
+    "/{purchase_id}/consume",
+    response_model=PurchaseResponse,
+    summary="Consume purchased energy",
+    description=(
+        "Buyer marks their purchased energy as consumed.\n\n"
+        "This **burns (destroys) the SEC tokens** from the buyer's wallet on the blockchain — "
+        "permanent on-chain proof that the solar energy was actually used.\n\n"
+        "- Purchase must be in **COMPLETED** status.\n"
+        "- Only the **buyer** of this purchase can call this.\n"
+        "- This action is **irreversible**."
+    )
+)
+def consume_energy(
+    purchase_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+    svc: PurchaseService = Depends(get_purchase_service)
+):
+    return svc.consume_purchase(db, purchase_id, current_user)
+
+

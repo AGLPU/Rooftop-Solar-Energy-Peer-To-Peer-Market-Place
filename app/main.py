@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.config import get_settings
-from app.routers import users, listings, purchases
+from app.routers import users, listings, purchases, blockchain
 
 settings = get_settings()
 
@@ -48,6 +48,7 @@ API_PREFIX = "/api/v1"
 app.include_router(users.router, prefix=API_PREFIX)
 app.include_router(listings.router, prefix=API_PREFIX)
 app.include_router(purchases.router, prefix=API_PREFIX)
+app.include_router(blockchain.router, prefix=API_PREFIX)
 
 # ─── Root endpoint ───────────────────────────────────────────────────────────
 
@@ -88,4 +89,3 @@ def health():
         response["database"] = "disconnected"
 
     return response
-

@@ -9,6 +9,7 @@ from app.models.purchase import Purchase, PurchaseStatus
 from app.models.listing import Listing, ListingStatus
 from app.models.user import User, UserRole
 from app.schemas.purchase import PurchaseCreateRequest
+from app.services.blockchain_service import get_blockchain_service
 
 
 class PurchaseService:
@@ -22,8 +23,8 @@ class PurchaseService:
     ) -> Purchase:
         """Create a new energy purchase"""
 
-        # Verify buyer role
-        if buyer.role not in [UserRole.BUYER, UserRole.ADMIN]:
+        # Verify buyer role — Admin is READ-ONLY and cannot purchase energy
+        if buyer.role != UserRole.BUYER:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Only buyers can purchase energy"
@@ -90,6 +91,27 @@ class PurchaseService:
 
         db.commit()
         db.refresh(purchase)
+
+        # ── Blockchain: Transfer SEC tokens seller → buyer ─────────────────
+        # Backend (Account #0 / contract owner) calls recordPurchase().
+        # This moves SEC tokens from the seller's wallet to the buyer's wallet.
+        # Admin does NOT do this — it is triggered automatically when a purchase happens.
+        # This is a WRITE operation: costs gas, signed by contract owner's private key.
+        seller = db.query(User).filter(User.id == listing.seller_id).first()
+        if seller and seller.wallet_address and buyer.wallet_address:
+            blockchain = get_blockchain_service()
+            tx_hash = blockchain.record_purchase(
+                seller_address=seller.wallet_address,
+                buyer_address=buyer.wallet_address,
+                energy_kwh=payload.energy_kwh,
+                price_eth=total_price
+            )
+            if tx_hash:
+                purchase.blockchain_tx_hash = tx_hash
+                purchase.status = PurchaseStatus.COMPLETED
+                purchase.completed_at = datetime.utcnow()
+                db.commit()
+                db.refresh(purchase)
 
         return purchase
 
@@ -203,6 +225,67 @@ class PurchaseService:
             if listing.status == ListingStatus.SOLD:
                 listing.status = ListingStatus.ACTIVE
             listing.updated_at = datetime.utcnow()
+
+        db.commit()
+        db.refresh(purchase)
+
+        return purchase
+
+
+    def consume_purchase(
+        self,
+        db: Session,
+        purchase_id: UUID,
+        buyer: User
+    ) -> Purchase:
+        """
+        Buyer marks energy as consumed → SEC tokens are burned on blockchain.
+
+        Only the buyer who owns the purchase can consume it.
+        Purchase must be in COMPLETED status before it can be consumed.
+        """
+        purchase = db.query(Purchase).filter(Purchase.id == purchase_id).first()
+
+        if not purchase:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Purchase not found"
+            )
+
+        # Only the buyer themselves can consume
+        if purchase.buyer_id != buyer.id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Only the buyer of this purchase can consume the energy"
+            )
+
+        # Must be completed before consuming
+        if purchase.status != PurchaseStatus.COMPLETED:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Cannot consume energy for purchase with status: {purchase.status}. Must be COMPLETED first."
+            )
+
+        if not buyer.wallet_address:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Buyer must have a wallet address to consume energy"
+            )
+
+        # ── Blockchain: Burn SEC tokens from buyer's wallet ────────────────
+        # Backend (Account #0) calls consumeEnergyFor(buyer, kwh)
+        # This DESTROYS the tokens — permanent proof that energy was actually used
+        blockchain = get_blockchain_service()
+        tx_hash = blockchain.consume_energy_for(
+            buyer_address=buyer.wallet_address,
+            energy_kwh=purchase.energy_kwh
+        )
+
+        if tx_hash:
+            purchase.consume_tx_hash = tx_hash
+
+        purchase.status = PurchaseStatus.CONSUMED
+        purchase.consumed_at = datetime.utcnow()
 
         db.commit()
         db.refresh(purchase)
