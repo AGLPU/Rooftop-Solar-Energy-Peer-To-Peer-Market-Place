@@ -132,8 +132,9 @@ class BlockchainService:
             "seller_id":     str(listing.seller_id),
             "energy_kwh":    int(listing.energy_kwh),
             "price_per_kwh": str(listing.price_per_kwh),
-            "location":      listing.location or "",       # buyers filter by this — tamper = fraud
-            "expires_at":    listing.expires_at.isoformat() if listing.expires_at else "",  # tamper = listing never expires
+            "energy_source": str(listing.energy_source.value if hasattr(listing.energy_source, 'value') else listing.energy_source),
+            "location":      listing.location or "",
+            "expires_at":    listing.expires_at.isoformat() if listing.expires_at else "",
             "created_at":    listing.created_at.isoformat() if listing.created_at else "",
         }
         # Sort keys for deterministic ordering

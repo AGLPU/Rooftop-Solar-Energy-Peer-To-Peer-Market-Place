@@ -4,7 +4,7 @@ from uuid import UUID
 from datetime import datetime
 from typing import List, Optional
 
-from app.models.listing import Listing, ListingStatus
+from app.models.listing import Listing, ListingStatus, EnergySource
 from app.models.user import User, UserRole
 from app.schemas.listing import ListingCreateRequest, ListingUpdateRequest
 from app.services.blockchain_service import get_blockchain_service
@@ -64,6 +64,7 @@ class ListingService:
             seller_id=seller.id,
             energy_kwh=payload.energy_kwh,
             price_per_kwh=payload.price_per_kwh,
+            energy_source=payload.energy_source,
             title=payload.title,
             description=payload.description,
             location=payload.location,
@@ -110,18 +111,19 @@ class ListingService:
         skip: int = 0,
         limit: int = 20,
         status: Optional[ListingStatus] = None,
-        seller_id: Optional[UUID] = None
+        seller_id: Optional[UUID] = None,
+        energy_source: Optional[EnergySource] = None
     ) -> List[Listing]:
         """Get all listings with filters"""
         query = db.query(Listing)
 
         if status:
             query = query.filter(Listing.status == status)
-
         if seller_id:
             query = query.filter(Listing.seller_id == seller_id)
+        if energy_source:
+            query = query.filter(Listing.energy_source == energy_source)
 
-        # Order by most recent first
         query = query.order_by(Listing.created_at.desc())
 
         return query.offset(skip).limit(limit).all()
@@ -130,19 +132,19 @@ class ListingService:
         self,
         db: Session,
         skip: int = 0,
-        limit: int = 20
+        limit: int = 20,
+        energy_source: Optional[EnergySource] = None
     ) -> List[Listing]:
         """Get only active, available listings"""
-        return db.query(Listing)\
+        query = db.query(Listing)\
             .filter(Listing.status == ListingStatus.ACTIVE)\
             .filter(
                 (Listing.expires_at.is_(None)) |
                 (Listing.expires_at > datetime.utcnow())
-            )\
-            .order_by(Listing.created_at.desc())\
-            .offset(skip)\
-            .limit(limit)\
-            .all()
+            )
+        if energy_source:
+            query = query.filter(Listing.energy_source == energy_source)
+        return query.order_by(Listing.created_at.desc()).offset(skip).limit(limit).all()
 
     def update_listing(
         self,
@@ -179,7 +181,12 @@ class ListingService:
             if payload.location is not None and payload.location != listing.location:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="location cannot be changed after listing is recorded on blockchain. Solar panels don't move — cancel and create a new listing."
+                    detail="location cannot be changed after listing is recorded on blockchain. Cancel and create a new listing."
+                )
+            if hasattr(payload, 'energy_source') and payload.energy_source is not None and payload.energy_source != listing.energy_source:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="energy_source cannot be changed after listing is recorded on blockchain. Cancel and create a new listing."
                 )
             if payload.expires_at is not None and listing.expires_at is not None:
                 if payload.expires_at < listing.expires_at:

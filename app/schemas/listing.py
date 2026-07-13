@@ -3,17 +3,18 @@ from datetime import datetime
 from uuid import UUID
 from decimal import Decimal
 from typing import Optional
+from app.models.listing import EnergySource
 
 
 class ListingCreateRequest(BaseModel):
     """Request to create a new energy listing"""
     energy_kwh: int = Field(..., gt=0, description="Amount of energy in kWh")
     price_per_kwh: Decimal = Field(..., gt=0, description="Price per kWh in ETH")
+    energy_source: EnergySource = Field(EnergySource.SOLAR, description="Type of renewable energy source")
     title: str = Field(..., min_length=5, max_length=200, description="Listing title")
     description: Optional[str] = Field(None, max_length=1000, description="Listing description")
     location: Optional[str] = Field(None, max_length=200, description="Energy production location")
     expires_at: Optional[datetime] = Field(None, description="When listing expires")
-    # Admin-only field: specify which seller to create this listing for
     seller_id: Optional[UUID] = Field(None, description="[Admin only] Target seller's user ID")
 
 
@@ -32,6 +33,7 @@ class ListingResponse(BaseModel):
     seller_id: UUID
     energy_kwh: int
     price_per_kwh: Decimal
+    energy_source: EnergySource
     title: str
     description: Optional[str]
     location: Optional[str]
@@ -61,6 +63,7 @@ class ListingWithSellerResponse(BaseModel):
     seller: SellerInfo
     energy_kwh: int
     price_per_kwh: Decimal
+    energy_source: EnergySource
     title: str
     description: Optional[str]
     location: Optional[str]

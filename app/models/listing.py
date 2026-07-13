@@ -19,6 +19,17 @@ class ListingStatus(str, enum.Enum):
     CANCELLED = "CANCELLED"
 
 
+class EnergySource(str, enum.Enum):
+    """Type of renewable energy source"""
+    SOLAR      = "SOLAR"       # Rooftop / ground-mounted solar panels
+    WIND       = "WIND"        # Wind turbines
+    HYDRO      = "HYDRO"       # Small-scale hydroelectric
+    BIOMASS    = "BIOMASS"     # Organic material combustion / biogas
+    GEOTHERMAL = "GEOTHERMAL"  # Earth heat energy
+    TIDAL      = "TIDAL"       # Ocean tidal / wave energy
+    OTHER      = "OTHER"       # Any other certified green source
+
+
 class Listing(Base):
     """
     Energy Listing Model
@@ -33,8 +44,13 @@ class Listing(Base):
     seller_id = Column(UUID(as_uuid=True), ForeignKey(f"{settings.database_schema}.users.id"), nullable=False)
 
     # Energy details
-    energy_kwh = Column(Integer, nullable=False)  # Amount of energy in kWh
-    price_per_kwh = Column(Numeric(10, 6), nullable=False)  # Price per kWh in ETH
+    energy_kwh = Column(Integer, nullable=False)
+    price_per_kwh = Column(Numeric(10, 6), nullable=False)
+    energy_source = Column(
+        SQLEnum(EnergySource, values_callable=lambda x: [e.value for e in x]),
+        nullable=False,
+        default=EnergySource.SOLAR
+    )
 
     # Listing details
     title = Column(String(200), nullable=False)
