@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.config import get_settings
-from app.routers import users, listings, purchases, blockchain
+from app.routers import users, listings, purchases, blockchain, public
 
 settings = get_settings()
 
@@ -13,9 +13,11 @@ app = FastAPI(
     title=settings.app_name,
     version=settings.app_version,
     description=(
-        "### RoofTop Solar Energy — Peer to Peer Marketplace\n\n"
-        "A platform where **sellers** list rooftop solar energy and "
-        "**buyers** purchase energy credits, settled via Ethereum smart contracts."
+        "### 🌿 Green Energy Marketplace — Peer-to-Peer Renewable Energy Trading\n\n"
+        "A platform where **sellers** list surplus renewable energy (Solar, Wind, Hydro, Biomass...) "
+        "and **buyers** purchase energy credits directly — settled via Ethereum smart contracts.\n\n"
+        "**AI Agent** powered by AWS Bedrock + RAG analyzes market data from `/api/v1/public/*` "
+        "endpoints to provide price predictions, demand forecasts and trading recommendations."
     ),
     docs_url="/docs",
     redoc_url="/redoc",
@@ -49,6 +51,7 @@ app.include_router(users.router, prefix=API_PREFIX)
 app.include_router(listings.router, prefix=API_PREFIX)
 app.include_router(purchases.router, prefix=API_PREFIX)
 app.include_router(blockchain.router, prefix=API_PREFIX)
+app.include_router(public.router, prefix=API_PREFIX)
 
 # ─── Root endpoint ───────────────────────────────────────────────────────────
 

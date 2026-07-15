@@ -53,13 +53,16 @@ class BlockchainService:
 
         # Get RPC URL from settings
         rpc_url = getattr(settings, 'blockchain_rpc_url', None)
+        logger.info(f"BLOCKCHAIN_ENABLED={settings.blockchain_enabled}")
+        logger.info(f"RPC_URL={rpc_url}")
+        logger.info(f"CONTRACT={settings.blockchain_contract_address}")
         if not rpc_url:
             logger.info("No blockchain RPC URL configured")
             return
 
         # Connect to blockchain
         self.w3 = Web3(Web3.HTTPProvider(rpc_url))
-
+        logger.info(f"is_connected={self.w3.is_connected()}")
         if not self.w3.is_connected():
             raise ConnectionError("Failed to connect to blockchain network")
 
