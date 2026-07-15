@@ -10,6 +10,7 @@ from typing import Optional, Dict, Any
 import hashlib
 import json
 import logging
+from web3.exceptions import TimeExhausted
 from pathlib import Path
 
 from app.config import get_settings
@@ -195,7 +196,7 @@ class BlockchainService:
             # Convert hex hash string to bytes32
             hash_bytes = bytes.fromhex(listing_hash) if listing_hash else bytes(32)
 
-            nonce = self.w3.eth.get_transaction_count(account.address)
+            nonce = self.w3.eth.get_transaction_count(account.address,"pending")
 
             transaction = self.contract.functions.mintEnergy(
                 self._Web3.to_checksum_address(seller_address),
@@ -211,15 +212,7 @@ class BlockchainService:
             })
 
             signed_txn = self.w3.eth.account.sign_transaction(transaction, private_key)
-            tx_hash = self.w3.eth.send_raw_transaction(signed_txn.rawTransaction)
-            tx_receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash)
-
-            if tx_receipt['status'] == 1:
-                logger.info(f"✅ Energy minted: {energy_kwh} kWh @ {price_per_kwh}/kWh to {seller_address}")
-                return tx_hash.hex()
-            else:
-                logger.error(f"❌ Transaction failed: {tx_hash.hex()}")
-                return None
+            return self._submit_transaction(signed_txn)
 
         except Exception as e:
             logger.error(f"Error minting energy: {e}")
@@ -254,7 +247,7 @@ class BlockchainService:
                 return None
 
             account = self.w3.eth.account.from_key(private_key)
-            nonce = self.w3.eth.get_transaction_count(account.address)
+            nonce = self.w3.eth.get_transaction_count(account.address,"pending")
 
             # Convert price to wei
             price_wei = self._Web3.to_wei(float(price_eth), 'ether')
@@ -272,16 +265,8 @@ class BlockchainService:
             })
 
             signed_txn = self.w3.eth.account.sign_transaction(transaction, private_key)
-            tx_hash = self.w3.eth.send_raw_transaction(signed_txn.rawTransaction)
 
-            tx_receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash)
-
-            if tx_receipt['status'] == 1:
-                logger.info(f"✅ Purchase recorded: {energy_kwh} kWh from {seller_address} to {buyer_address}")
-                return tx_hash.hex()
-            else:
-                logger.error(f"❌ Purchase transaction failed")
-                return None
+            return self._submit_transaction(signed_txn)
 
         except Exception as e:
             logger.error(f"Error recording purchase: {e}")
@@ -352,7 +337,7 @@ class BlockchainService:
                 return None
 
             account = self.w3.eth.account.from_key(private_key)
-            nonce = self.w3.eth.get_transaction_count(account.address)
+            nonce = self.w3.eth.get_transaction_count(account.address,"pending")
 
             transaction = self.contract.functions.consumeEnergyFor(
                 self._Web3.to_checksum_address(buyer_address),
@@ -365,15 +350,7 @@ class BlockchainService:
             })
 
             signed_txn = self.w3.eth.account.sign_transaction(transaction, private_key)
-            tx_hash = self.w3.eth.send_raw_transaction(signed_txn.rawTransaction)
-            tx_receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash)
-
-            if tx_receipt['status'] == 1:
-                logger.info(f"✅ Energy consumed (burned): {energy_kwh} kWh from {buyer_address}")
-                return tx_hash.hex()
-            else:
-                logger.error(f"❌ Consume energy transaction failed: {tx_hash.hex()}")
-                return None
+            return self._submit_transaction(signed_txn)
 
         except Exception as e:
             logger.error(f"Error consuming energy: {e}")
@@ -460,6 +437,51 @@ class BlockchainService:
                 "error": str(e)
             }
 
+    def _submit_transaction(
+            self,
+            signed_txn
+        ) -> Optional[str]:
+            """
+            Submit transaction and wait for receipt.
+            Returns tx hash even if receipt times out.
+            """
+
+            try:
+                # Web3 v6
+                raw_tx = signed_txn.rawTransaction
+            except AttributeError:
+                # Web3
+                raw_tx = signed_txn.raw_transaction
+
+            tx_hash = self.w3.eth.send_raw_transaction(raw_tx)
+
+            logger.info(
+                f"Transaction submitted: {tx_hash.hex()}"
+            )
+
+            try:
+                receipt = self.w3.eth.wait_for_transaction_receipt(
+                    tx_hash,
+                    timeout=300
+                )
+
+                if receipt["status"] == 1:
+                    logger.info(
+                        f"Transaction mined successfully: {tx_hash.hex()}"
+                    )
+                    return tx_hash.hex()
+
+                logger.error(
+                    f"Transaction mined but failed: {tx_hash.hex()}"
+                )
+                return None
+
+            except TimeExhausted:
+                logger.warning(
+                    f"Receipt timeout, but tx submitted successfully: "
+                    f"{tx_hash.hex()}"
+                )
+                return tx_hash.hex()
 
 # Singleton instance
 _blockchain_service: Optional[BlockchainService] = None
@@ -471,4 +493,3 @@ def get_blockchain_service() -> BlockchainService:
     if _blockchain_service is None:
         _blockchain_service = BlockchainService()
     return _blockchain_service
-
