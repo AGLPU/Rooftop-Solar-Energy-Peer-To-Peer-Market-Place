@@ -60,6 +60,19 @@ def login(
         user=UserResponse.model_validate(result["user"]),
     )
 
+@router.post(
+    "/logout",
+    response_model=MessageResponse,
+    summary="Logout and invalidate JWT tokens",
+)
+def logout(
+    payload: UserLoginRequest,
+    db: Session = Depends(get_db),
+    svc: UserService = Depends(get_user_service),
+):
+    svc.logout(db, payload.email)
+    return MessageResponse(message="Logged out successfully")
+
 
 # ─── Current user (me) ───────────────────────────────────────────────────────
 
