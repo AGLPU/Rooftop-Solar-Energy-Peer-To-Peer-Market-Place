@@ -42,7 +42,7 @@ services:
 
       # ── App ───────────────────────────────────────────────────────────────
       - key: APP_NAME
-        value: RoofTop Solar Energy Marketplace
+        value: GreenGrid Energy Exchange
       - key: APP_VERSION
         value: 1.0.0
       - key: DEBUG

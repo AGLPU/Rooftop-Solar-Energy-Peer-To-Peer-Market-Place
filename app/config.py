@@ -6,7 +6,7 @@ import os
 
 class Settings(BaseSettings):
     # App
-    app_name: str = "RoofTop Solar Energy Marketplace"
+    app_name: str = "GreenGrid Energy Exchange"
     app_version: str = "1.0.0"
     debug: bool = True
     allowed_origins: str = (

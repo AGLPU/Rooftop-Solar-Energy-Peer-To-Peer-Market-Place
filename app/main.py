@@ -59,7 +59,7 @@ app.include_router(public.router, prefix=API_PREFIX)
 def root():
     """Welcome endpoint - shows API information"""
     return {
-        "message": "Welcome to RoofTop Solar Energy Marketplace API",
+        "message": f"Welcome to {settings.app_name} API",
         "version": settings.app_version,
         "docs": "/docs",
         "redoc": "/redoc",
