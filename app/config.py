@@ -9,7 +9,11 @@ class Settings(BaseSettings):
     app_name: str = "RoofTop Solar Energy Marketplace"
     app_version: str = "1.0.0"
     debug: bool = True
-    allowed_origins: str = "http://localhost:3000"
+    allowed_origins: str = (
+        "http://localhost:3000,"
+        "https://green-energy-marketplace-react.vercel.app"
+    )
+
 
     # Database credentials (AWS RDS style)
     database_username: str | None = None
