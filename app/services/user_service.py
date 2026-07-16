@@ -102,6 +102,16 @@ class UserService:
             "user": user,
         }
 
+    # ─── Logout ──────────────────────────────────────────────────────────────
+
+    def logout(self, db: Session, user: User) -> None:
+        """
+        Handle user logout.
+        Updates last_logout_at timestamp and can be extended for token blacklisting.
+        """
+        user.last_logout_at = datetime.now(timezone.utc)
+        db.commit()
+
     # ─── Get user ────────────────────────────────────────────────────────────
 
     def get_by_id(self, db: Session, user_id: uuid.UUID) -> User:

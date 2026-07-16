@@ -72,6 +72,7 @@ class User(Base):
         nullable=False,
     )
     last_login_at = Column(DateTime(timezone=True), nullable=True)
+    last_logout_at = Column(DateTime(timezone=True), nullable=True)
 
     # ─── Relationships ───────────────────────────────────────
     listings = relationship("Listing", back_populates="seller", foreign_keys="Listing.seller_id")

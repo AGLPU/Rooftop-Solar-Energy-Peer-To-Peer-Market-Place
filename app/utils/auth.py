@@ -71,6 +71,14 @@ def get_current_user(
     if user is None or not user.is_active:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found or inactive")
 
+    # Check if token was issued before user logged out (token invalidation)
+    token_issued_at = datetime.fromtimestamp(payload.get("iat"), tz=timezone.utc)
+    if user.last_logout_at and user.last_logout_at > token_issued_at:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token has been invalidated. Please login again.",
+        )
+
     return user
 
 
