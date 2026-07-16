@@ -60,12 +60,18 @@ class ListingService:
             )
 
         # Create listing
+        # Auto-generate title if not provided: "EC-{energy_kwh}-{first_block_of_seller_uuid}"
+        title = payload.title
+        if not title:
+            seller_uuid_block = str(seller.id).split('-')[0]  # Get first block of UUID (first 8 chars)
+            title = f"EC-{payload.energy_kwh}-{seller_uuid_block}"
+        
         listing = Listing(
             seller_id=seller.id,
             energy_kwh=payload.energy_kwh,
             price_per_kwh=payload.price_per_kwh,
             energy_source=payload.energy_source,
-            title=payload.title,
+            title=title,
             description=payload.description,
             location=payload.location,
             expires_at=payload.expires_at,

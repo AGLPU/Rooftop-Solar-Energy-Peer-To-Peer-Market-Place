@@ -11,7 +11,7 @@ class ListingCreateRequest(BaseModel):
     energy_kwh: int = Field(..., gt=0, description="Amount of energy in kWh")
     price_per_kwh: Decimal = Field(..., gt=0, description="Price per kWh in ETH")
     energy_source: EnergySource = Field(EnergySource.SOLAR, description="Type of renewable energy source")
-    title: str = Field(..., min_length=5, max_length=200, description="Listing title")
+    title: Optional[str] = Field(None, min_length=5, max_length=200, description="Listing title (auto-generated if not provided)")
     description: Optional[str] = Field(None, max_length=1000, description="Listing description")
     location: Optional[str] = Field(None, max_length=200, description="Energy production location")
     expires_at: Optional[datetime] = Field(None, description="When listing expires")
