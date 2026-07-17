@@ -178,6 +178,10 @@ class ListingService:
             )
         # ADMIN sees all listings (no filter)
 
+        query = query.order_by(Listing.created_at.desc())
+
+        return query.offset(skip).limit(limit).all()
+
     def get_active_listings(
         self,
         db: Session,

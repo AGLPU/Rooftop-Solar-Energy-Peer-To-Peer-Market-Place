@@ -33,23 +33,6 @@ def create_purchase(
     return svc.create_purchase(db, payload, current_user)
 
 
-# ─── Get Single Purchase ─────────────────────────────────────────────────────
-
-@router.get(
-    "/{purchase_id}",
-    response_model=PurchaseResponse,
-    summary="Get purchase by ID",
-    description="Get details of a specific purchase"
-)
-def get_purchase(
-    purchase_id: UUID,
-    db: Session = Depends(get_read_db),
-    current_user: User = Depends(get_current_active_user),
-    svc: PurchaseService = Depends(get_purchase_service)
-):
-    return svc.get_purchase(db, purchase_id, current_user)
-
-
 # ─── Get My Purchases ────────────────────────────────────────────────────────
 
 @router.get(
@@ -68,7 +51,7 @@ def get_my_purchases(
     return svc.get_user_purchases(db, current_user.id, skip=skip, limit=limit)
 
 
-# ─── Get My Sales ───────────────────────────────────────────────────────���────
+# ─── Get My Sales ────────────────────────────────────────────────────────────
 
 @router.get(
     "/my-sales",
@@ -84,6 +67,23 @@ def get_my_sales(
     svc: PurchaseService = Depends(get_purchase_service)
 ):
     return svc.get_user_sales(db, current_user.id, skip=skip, limit=limit)
+
+
+# ─── Get Single Purchase ─────────────────────────────────────────────────────
+
+@router.get(
+    "/{purchase_id}",
+    response_model=PurchaseResponse,
+    summary="Get purchase by ID",
+    description="Get details of a specific purchase"
+)
+def get_purchase(
+    purchase_id: UUID,
+    db: Session = Depends(get_read_db),
+    current_user: User = Depends(get_current_active_user),
+    svc: PurchaseService = Depends(get_purchase_service)
+):
+    return svc.get_purchase(db, purchase_id, current_user)
 
 
 # ─── Consume Energy (Burn Tokens) ────────────────────────────────────────────
@@ -108,5 +108,3 @@ def consume_energy(
     svc: PurchaseService = Depends(get_purchase_service)
 ):
     return svc.consume_purchase(db, purchase_id, current_user)
-
-

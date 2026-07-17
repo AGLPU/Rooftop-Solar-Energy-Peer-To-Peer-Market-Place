@@ -97,7 +97,7 @@ def get_my_listings(
     current_user: User = Depends(get_current_active_user),
     svc: ListingService = Depends(get_listing_service)
 ):
-    return svc.get_all_listings(db, skip=skip, limit=limit, seller_id=current_user.id)
+    return svc.get_all_listings(db, skip=skip, limit=limit, seller_id=current_user.id, current_user=current_user)
 
 
 # ─── Get Single Listing ──────────────────────────────────────────────────────
