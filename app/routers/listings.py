@@ -48,7 +48,7 @@ def create_listing(
     "/",
     response_model=List[ListingResponse],
     summary="Get all listings",
-    description="Get all energy listings with optional filters"
+    description="Get all energy listings with optional filters. Buyers only see verified listings."
 )
 def list_listings(
     skip: int = Query(0, ge=0),
@@ -57,9 +57,10 @@ def list_listings(
     seller_id: Optional[UUID] = Query(None, description="Filter by seller"),
     energy_source: Optional[EnergySource] = Query(None, description="Filter by energy source (SOLAR, WIND, HYDRO, BIOMASS, GEOTHERMAL, TIDAL, OTHER)"),
     db: Session = Depends(get_read_db),
-    svc: ListingService = Depends(get_listing_service)
+    svc: ListingService = Depends(get_listing_service),
+    current_user: Optional[User] = Depends(get_current_active_user)
 ):
-    return svc.get_all_listings(db, skip=skip, limit=limit, status=status, seller_id=seller_id, energy_source=energy_source)
+    return svc.get_all_listings(db, skip=skip, limit=limit, status=status, seller_id=seller_id, energy_source=energy_source, current_user=current_user)
 
 
 # ─── Get Active Listings ─────────────────────────────────────────────────────
@@ -68,16 +69,17 @@ def list_listings(
     "/active",
     response_model=List[ListingResponse],
     summary="Get active listings",
-    description="Get only active and available energy listings"
+    description="Get only active and available energy listings. Buyers only see verified listings."
 )
 def get_active_listings(
     skip: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
     energy_source: Optional[EnergySource] = Query(None, description="Filter by energy source (SOLAR, WIND, HYDRO, BIOMASS, GEOTHERMAL, TIDAL, OTHER)"),
     db: Session = Depends(get_read_db),
-    svc: ListingService = Depends(get_listing_service)
+    svc: ListingService = Depends(get_listing_service),
+    current_user: Optional[User] = Depends(get_current_active_user)
 ):
-    return svc.get_active_listings(db, skip=skip, limit=limit, energy_source=energy_source)
+    return svc.get_active_listings(db, skip=skip, limit=limit, energy_source=energy_source, current_user=current_user)
 
 
 # ─── Get My Listings ─────────────────────────────────────────────────────────

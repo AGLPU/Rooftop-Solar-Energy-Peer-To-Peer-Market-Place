@@ -39,6 +39,11 @@ class ListingResponse(BaseModel):
     location: Optional[str]
     status: str
     blockchain_tx_hash: Optional[str]
+    verified: bool
+    verified_at: Optional[datetime]
+    is_tampered: bool
+    tampered_at: Optional[datetime]
+    tampered_reason: Optional[str]
     created_at: datetime
     updated_at: datetime
     expires_at: Optional[datetime]
@@ -69,6 +74,11 @@ class ListingWithSellerResponse(BaseModel):
     location: Optional[str]
     status: str
     blockchain_tx_hash: Optional[str]
+    verified: bool
+    verified_at: Optional[datetime]
+    is_tampered: bool
+    tampered_at: Optional[datetime]
+    tampered_reason: Optional[str]
     created_at: datetime
     updated_at: datetime
     expires_at: Optional[datetime]

@@ -52,6 +52,13 @@ class PurchaseService:
                 detail="Listing is not available for purchase"
             )
 
+        # Verify listing is not tampered
+        if listing.is_tampered:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"This listing has been flagged as tampered and is no longer available for purchase. Reason: {listing.tampered_reason}"
+            )
+
         # Verify buyer is not the seller
         if listing.seller_id == buyer.id:
             raise HTTPException(
