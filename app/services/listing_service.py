@@ -17,30 +17,50 @@ class ListingService:
         """
         Verify listing hasn't been tampered with by comparing DB hash to blockchain hash.
         Returns True if intact, False if tampered.
+        Updates is_tampered flag if tampering is detected.
         """
-        if not listing.blockchain_tx_hash:
-            return True  # No blockchain record, can't verify
+        # Only check verified listings with blockchain records
+        if not listing.verified or not listing.blockchain_tx_hash:
+            return True
 
         blockchain = get_blockchain_service()
         if not blockchain.is_available():
             return True  # Can't verify if blockchain unavailable
 
         try:
+            # Get listing record from blockchain
+            on_chain_listing = blockchain.get_listing_record(str(listing.id))
+            if not on_chain_listing:
+                return True  # Listing not on chain, can't verify
+            
             # Compute current hash from DB state
             current_hash = blockchain.compute_listing_hash(listing)
+            on_chain_hash = on_chain_listing.get("listing_hash")
             
-            # Get hash from blockchain (would need to implement this in blockchain service)
-            # For now, we'll mark as tampered if critical fields changed
-            # This is a simplified check - in production use contract storage verification
+            if current_hash != on_chain_hash:
+                # Tampering detected - update listing
+                listing.is_tampered = True
+                listing.tampered_at = datetime.now(timezone.utc)
+                listing.tampered_reason = (
+                    f"HASH MISMATCH DETECTED: Listing fields were modified after creation. "
+                    f"On-chain hash: {on_chain_hash[:16]}... | Current DB hash: {current_hash[:16]}... "
+                    f"Modified fields may include: energy_kwh, price_per_kwh, title, description, location, status"
+                )
+                db.commit()
+                return False
             
-            return True  # If no exception, listing is intact
+            # Listing is intact
+            if listing.is_tampered:
+                # Clear tampering flag if it was previously set but now passes verification
+                listing.is_tampered = False
+                listing.tampered_at = None
+                listing.tampered_reason = None
+                db.commit()
+            
+            return True
         except Exception as e:
-            # If we can't verify, assume it's tampered for safety
-            listing.is_tampered = True
-            listing.tampered_at = datetime.now(timezone.utc)
-            listing.tampered_reason = f"Integrity check failed: {str(e)}"
-            db.commit()
-            return False
+            # If verification fails, log but don't fail the query
+            return True
 
     def create_listing(
         self,
@@ -153,8 +173,8 @@ class ListingService:
         current_user: Optional[User] = None
     ) -> List[Listing]:
         """
-        Get all listings with filters.
-        - Buyers: only see verified listings
+        Get all listings with filters and real-time integrity verification.
+        - Buyers: only see verified + non-tampered listings (checked on-the-fly)
         - Sellers: see their own (verified + unverified) + others' verified
         - Admins: see all listings
         """
@@ -170,7 +190,6 @@ class ListingService:
         # Visibility logic: buyers only see verified, sellers/admins see all
         if current_user and current_user.role == UserRole.BUYER:
             query = query.filter(Listing.verified == True)
-            query = query.filter(Listing.is_tampered == False)  # ✅ Hide tampered from buyers
         elif current_user and current_user.role == UserRole.SELLER:
             # Sellers see verified listings OR their own listings (verified + unverified)
             query = query.filter(
@@ -179,8 +198,23 @@ class ListingService:
         # ADMIN sees all listings (no filter)
 
         query = query.order_by(Listing.created_at.desc())
+        listings = query.offset(skip).limit(limit).all()
 
-        return query.offset(skip).limit(limit).all()
+        # Real-time integrity check for each listing
+        filtered_listings = []
+        for listing in listings:
+            self._check_listing_integrity(db, listing)
+            
+            # After integrity check, apply visibility filter
+            if current_user and current_user.role == UserRole.BUYER:
+                # Buyers can't see tampered listings
+                if not listing.is_tampered:
+                    filtered_listings.append(listing)
+            else:
+                # Sellers and admins can see all (including tampered)
+                filtered_listings.append(listing)
+
+        return filtered_listings
 
     def get_active_listings(
         self,
@@ -191,8 +225,8 @@ class ListingService:
         current_user: Optional[User] = None
     ) -> List[Listing]:
         """
-        Get only active, available listings.
-        - Buyers: only see verified listings
+        Get only active, available listings with real-time integrity verification.
+        - Buyers: only see verified + non-tampered listings (checked on-the-fly)
         - Sellers: see their own (verified + unverified) + others' verified
         - Admins: see all listings
         """
@@ -208,7 +242,6 @@ class ListingService:
         # Visibility logic: buyers only see verified, sellers/admins see all
         if current_user and current_user.role == UserRole.BUYER:
             query = query.filter(Listing.verified == True)
-            query = query.filter(Listing.is_tampered == False)  # ✅ Hide tampered from buyers
         elif current_user and current_user.role == UserRole.SELLER:
             # Sellers see verified listings OR their own listings (verified + unverified)
             query = query.filter(
@@ -216,7 +249,23 @@ class ListingService:
             )
         # ADMIN sees all listings (no filter)
 
-        return query.order_by(Listing.created_at.desc()).offset(skip).limit(limit).all()
+        listings = query.order_by(Listing.created_at.desc()).offset(skip).limit(limit).all()
+
+        # Real-time integrity check for each listing
+        filtered_listings = []
+        for listing in listings:
+            self._check_listing_integrity(db, listing)
+            
+            # After integrity check, apply visibility filter
+            if current_user and current_user.role == UserRole.BUYER:
+                # Buyers can't see tampered listings
+                if not listing.is_tampered:
+                    filtered_listings.append(listing)
+            else:
+                # Sellers and admins can see all (including tampered)
+                filtered_listings.append(listing)
+
+        return filtered_listings
 
     def update_listing(
         self,

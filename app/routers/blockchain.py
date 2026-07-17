@@ -2,8 +2,9 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import Optional, List
 from uuid import UUID
+from datetime import datetime, timezone
 
-from app.database import get_read_db
+from app.database import get_read_db, get_db
 from app.models.user import User, UserRole
 from app.models.listing import Listing, ListingStatus
 from app.models.purchase import Purchase
@@ -65,12 +66,15 @@ def get_token_balance(wallet_address: str):
         "- The seller's wallet address\n"
         "- The mint transaction hash (stored in DB)\n"
         "- Current token balance of the seller\n"
-        "- Total energy ever produced by the seller"
+        "- Total energy ever produced by the seller\n\n"
+        "**Also updates the listing in DB:**\n"
+        "- If VERIFIED: sets verified=true, verified_at=now\n"
+        "- If TAMPERED: sets is_tampered=true, tampered_reason with details"
     )
 )
 def verify_listing_on_blockchain(
     listing_id: UUID,
-    db: Session = Depends(get_read_db),
+    db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
     # Fetch listing from DB
@@ -149,6 +153,22 @@ def verify_listing_on_blockchain(
                 "No tampering detected on any field."
             )
 
+    # ── Update listing in DB based on verification result ─────────────────────
+    if integrity_status == "VERIFIED":
+        listing.verified = True
+        listing.verified_at = datetime.now(timezone.utc)
+        listing.is_tampered = False
+        listing.tampered_at = None
+        listing.tampered_reason = None
+    else:  # TAMPERED
+        listing.verified = False
+        listing.is_tampered = True
+        listing.tampered_at = datetime.now(timezone.utc)
+        listing.tampered_reason = "; ".join(tamper_warnings)
+
+    db.commit()
+    db.refresh(listing)
+
     return {
         "listing_id":            str(listing_id),
         "listing_title":         listing.title,
@@ -180,6 +200,15 @@ def verify_listing_on_blockchain(
         "integrity": {
             "status": integrity_status,
             "checks": tamper_warnings,
+        },
+
+        "db_update": {
+            "verified": listing.verified,
+            "verified_at": listing.verified_at,
+            "is_tampered": listing.is_tampered,
+            "tampered_at": listing.tampered_at,
+            "tampered_reason": listing.tampered_reason,
+            "message": f"Listing updated in DB: integrity_status={integrity_status}"
         },
 
         "explanation": (
