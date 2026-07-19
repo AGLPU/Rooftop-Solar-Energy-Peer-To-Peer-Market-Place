@@ -1,15 +1,18 @@
 from sqlalchemy.orm import Session
 from fastapi import HTTPException, status
 from uuid import UUID
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal
 from typing import List
+import json
 
 from app.models.purchase import Purchase, PurchaseStatus
 from app.models.listing import Listing, ListingStatus
 from app.models.user import User, UserRole
 from app.schemas.purchase import PurchaseCreateRequest
 from app.services.blockchain_service import get_blockchain_service
+from app.services.audit_service import AuditService
+from app.models.audit import AuditEventType
 
 
 class PurchaseService:
@@ -99,6 +102,21 @@ class PurchaseService:
         db.commit()
         db.refresh(purchase)
 
+        # ── Audit: Log purchase creation ──────────────────────────────────────
+        AuditService.log_event(
+            db=db,
+            event_type=AuditEventType.PURCHASE_CREATED,
+            listing_id=listing.id,
+            purchase_id=purchase.id,
+            energy_kwh=purchase.energy_kwh,
+            initiated_by=buyer,
+            details={
+                "buyer_id": str(purchase.buyer_id),
+                "seller_id": str(purchase.seller_id),
+                "total_price": str(purchase.total_price)
+            }
+        )
+
         # ── Blockchain: Transfer SEC tokens seller → buyer ─────────────────
         # Backend (Account #0 / contract owner) calls recordPurchase().
         # This moves SEC tokens from the seller's wallet to the buyer's wallet.
@@ -119,6 +137,18 @@ class PurchaseService:
                 purchase.completed_at = datetime.utcnow()
                 db.commit()
                 db.refresh(purchase)
+                
+                # ── Audit: Log purchase completion ───────────────────────────
+                AuditService.log_event(
+                    db=db,
+                    event_type=AuditEventType.PURCHASE_COMPLETED,
+                    listing_id=listing.id,
+                    purchase_id=purchase.id,
+                    energy_kwh=purchase.energy_kwh,
+                    blockchain_tx_hash=tx_hash,
+                    initiated_by=None,  # System/blockchain triggered
+                    details={"status": "COMPLETED"}
+                )
 
         return purchase
 
@@ -296,6 +326,18 @@ class PurchaseService:
 
         db.commit()
         db.refresh(purchase)
+
+        # ── Audit: Log energy consumption ────────────────────────────────────
+        AuditService.log_event(
+            db=db,
+            event_type=AuditEventType.PURCHASE_CONSUMED,
+            listing_id=purchase.listing_id,
+            purchase_id=purchase.id,
+            energy_kwh=purchase.energy_kwh,
+            blockchain_tx_hash=purchase.consume_tx_hash,
+            initiated_by=buyer,
+            details={"consumed_at": str(datetime.now(timezone.utc))}
+        )
 
         return purchase
 

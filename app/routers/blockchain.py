@@ -3,12 +3,15 @@ from sqlalchemy.orm import Session
 from typing import Optional, List
 from uuid import UUID
 from datetime import datetime, timezone
+import json
 
 from app.database import get_read_db, get_db
 from app.models.user import User, UserRole
 from app.models.listing import Listing, ListingStatus
 from app.models.purchase import Purchase
 from app.services.blockchain_service import get_blockchain_service
+from app.services.audit_service import AuditService
+from app.models.audit import AuditEventType
 from app.utils.auth import get_current_active_user, require_admin
 
 router = APIRouter(prefix="/blockchain", tags=["Blockchain"])
@@ -96,6 +99,15 @@ def verify_listing_on_blockchain(
     # Fetch seller
     seller = listing.seller
     blockchain = get_blockchain_service()
+
+    # ── Audit: Log verification request ──────────────────────────────────────
+    AuditService.log_event(
+        db=db,
+        event_type=AuditEventType.VERIFICATION_REQUESTED,
+        listing_id=listing_id,
+        initiated_by=current_user,
+        details={"action": "manual_verification"}
+    )
 
     # Read blockchain data (all free reads — no gas)
     current_balance  = blockchain.get_energy_balance(seller.wallet_address) if seller.wallet_address else None

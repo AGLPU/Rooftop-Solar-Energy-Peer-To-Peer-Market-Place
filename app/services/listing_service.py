@@ -3,13 +3,14 @@ from fastapi import HTTPException, status
 from uuid import UUID
 from datetime import datetime, timezone
 from typing import List, Optional
+import json
 
 from app.models.listing import Listing, ListingStatus, EnergySource
 from app.models.user import User, UserRole
 from app.schemas.listing import ListingCreateRequest, ListingUpdateRequest
 from app.services.blockchain_service import get_blockchain_service
-
-
+from app.services.audit_service import AuditService
+from app.models.audit import AuditEventType
 class ListingService:
     """Service for energy listing operations"""
 
@@ -47,6 +48,20 @@ class ListingService:
                     f"Modified fields may include: energy_kwh, price_per_kwh, title, description, location, status"
                 )
                 db.commit()
+                
+                # ── Audit: Log tampering detection ───────────────────────────
+                AuditService.log_event(
+                    db=db,
+                    event_type=AuditEventType.LISTING_TAMPERED,
+                    listing_id=listing.id,
+                    initiated_by=None,  # System detected, not user-initiated
+                    details={
+                        "on_chain_hash": on_chain_hash,
+                        "current_hash": current_hash,
+                        "reason": listing.tampered_reason
+                    }
+                )
+                
                 return False
             
             # Listing is intact
@@ -131,6 +146,21 @@ class ListingService:
         db.commit()
         db.refresh(listing)
 
+        # ── Audit: Log listing creation ──────────────────────────────────────
+        AuditService.log_event(
+            db=db,
+            event_type=AuditEventType.LISTING_CREATED,
+            listing_id=listing.id,
+            energy_kwh=listing.energy_kwh,
+            initiated_by=current_user,
+            details={
+                "title": listing.title,
+                "price_per_kwh": str(listing.price_per_kwh),
+                "location": listing.location,
+                "energy_source": listing.energy_source
+            }
+        )
+
         # ── Blockchain: Mint SEC tokens to seller ──────────────────────────
         blockchain = get_blockchain_service()
         listing_hash = blockchain.compute_listing_hash(listing)
@@ -147,6 +177,17 @@ class ListingService:
             listing.verified_at = datetime.utcnow()
             db.commit()
             db.refresh(listing)
+            
+            # ── Audit: Log blockchain mint ───────────────────────────────────
+            AuditService.log_event(
+                db=db,
+                event_type=AuditEventType.BLOCKCHAIN_TX_MINTED,
+                listing_id=listing.id,
+                energy_kwh=listing.energy_kwh,
+                blockchain_tx_hash=tx_hash,
+                initiated_by=current_user,
+                details={"listing_hash": listing_hash}
+            )
 
         return listing
 
