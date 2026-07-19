@@ -234,9 +234,8 @@ def get_listing_trace(
         listing_title=listing.title,
         seller_username=listing.seller.username,
         energy_kwh=listing.energy_kwh,
-        current_status="VERIFIED" if listing.verified else "UNVERIFIED",
-        journey=events,
         total_events=len(audit_logs),
+        event_timeline=events,
         summary=summary
     )
 
