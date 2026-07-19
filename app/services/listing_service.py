@@ -14,6 +14,7 @@ from app.services.audit_service import AuditService
 from app.models.audit import AuditEventType
 
 logger = logging.getLogger(__name__)
+
 class ListingService:
     """Service for energy listing operations"""
 
