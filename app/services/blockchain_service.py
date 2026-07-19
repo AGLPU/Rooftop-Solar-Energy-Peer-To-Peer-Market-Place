@@ -255,7 +255,8 @@ class BlockchainService:
         seller_address: str,
         buyer_address: str,
         energy_kwh: int,
-        price_eth: Decimal
+        price_eth: Decimal,
+        listing_id: str = ""
     ) -> Optional[str]:
         """
         Record energy purchase on blockchain
@@ -265,6 +266,7 @@ class BlockchainService:
             buyer_address: Buyer's Ethereum address
             energy_kwh: Amount of energy purchased
             price_eth: Price paid in ETH
+            listing_id: DB listing UUID — for tracking purchases per listing
 
         Returns:
             Transaction hash or None
@@ -288,7 +290,8 @@ class BlockchainService:
                 self._Web3.to_checksum_address(seller_address),
                 self._Web3.to_checksum_address(buyer_address),
                 energy_kwh,
-                price_wei
+                price_wei,
+                listing_id
             ).build_transaction({
                 'from': account.address,
                 'nonce': nonce,
