@@ -171,23 +171,33 @@ class ListingService:
             listing_id=str(listing.id),
             listing_hash=listing_hash
         )
-        if tx_hash:
-            listing.blockchain_tx_hash = tx_hash
-            listing.verified = True  # Auto-verify on successful blockchain mint
-            listing.verified_at = datetime.utcnow()
-            db.commit()
-            db.refresh(listing)
-            
-            # ── Audit: Log blockchain mint ───────────────────────────────────
-            AuditService.log_event(
-                db=db,
-                event_type=AuditEventType.BLOCKCHAIN_TX_MINTED,
-                listing_id=listing.id,
-                energy_kwh=listing.energy_kwh,
-                blockchain_tx_hash=tx_hash,
-                initiated_by=current_user,
-                details={"listing_hash": listing_hash}
+        
+        # ── Enforce: Blockchain mint is REQUIRED ─────────────────────────────
+        if not tx_hash:
+            # Rollback the listing creation if blockchain mint fails
+            db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to mint energy tokens on blockchain. Listing creation cancelled. Please verify blockchain connection and try again."
             )
+        
+        # ── Blockchain mint succeeded ────────────────────────────────────────
+        listing.blockchain_tx_hash = tx_hash
+        listing.verified = True  # Auto-verify on successful blockchain mint
+        listing.verified_at = datetime.utcnow()
+        db.commit()
+        db.refresh(listing)
+        
+        # ── Audit: Log blockchain mint ───────────────────────────────────────
+        AuditService.log_event(
+            db=db,
+            event_type=AuditEventType.BLOCKCHAIN_TX_MINTED,
+            listing_id=listing.id,
+            energy_kwh=listing.energy_kwh,
+            blockchain_tx_hash=tx_hash,
+            initiated_by=current_user,
+            details={"listing_hash": listing_hash}
+        )
 
         return listing
 
@@ -262,6 +272,7 @@ class ListingService:
         db: Session,
         skip: int = 0,
         limit: int = 20,
+        status: Optional[ListingStatus] = None,
         energy_source: Optional[EnergySource] = None,
         current_user: Optional[User] = None
     ) -> List[Listing]:
@@ -271,12 +282,19 @@ class ListingService:
         - Sellers: see their own (verified + unverified) + others' verified
         - Admins: see all listings
         """
-        query = db.query(Listing)\
-            .filter(Listing.status == ListingStatus.ACTIVE)\
-            .filter(
-                (Listing.expires_at.is_(None)) |
-                (Listing.expires_at > datetime.utcnow())
-            )
+        query = db.query(Listing)
+        
+        # Filter by status (default to ACTIVE if not specified)
+        if status:
+            query = query.filter(Listing.status == status)
+        else:
+            query = query.filter(Listing.status == ListingStatus.ACTIVE)
+        
+        # Check expiration
+        query = query.filter(
+            (Listing.expires_at.is_(None)) |
+            (Listing.expires_at > datetime.utcnow())
+        )
         if energy_source:
             query = query.filter(Listing.energy_source == energy_source)
 
