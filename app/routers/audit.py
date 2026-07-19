@@ -16,7 +16,7 @@ from app.schemas.audit import (
 )
 from app.utils.auth import get_current_active_user
 
-router = APIRouter(prefix="/api/v1/audit", tags=["audit"])
+router = APIRouter(prefix="/audit", tags=["audit"])
 
 
 @router.get(

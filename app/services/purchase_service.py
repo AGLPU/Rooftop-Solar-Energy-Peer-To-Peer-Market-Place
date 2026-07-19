@@ -129,7 +129,8 @@ class PurchaseService:
                 seller_address=seller.wallet_address,
                 buyer_address=buyer.wallet_address,
                 energy_kwh=payload.energy_kwh,
-                price_eth=total_price
+                price_eth=total_price,
+                listing_id=str(listing.id)
             )
             if tx_hash:
                 purchase.blockchain_tx_hash = tx_hash
