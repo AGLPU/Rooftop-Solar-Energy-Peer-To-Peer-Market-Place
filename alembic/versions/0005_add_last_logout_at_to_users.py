@@ -1,0 +1,31 @@
+"""add last_logout_at to users table
+
+Revision ID: 0005
+Revises: 0004
+Create Date: 2026-07-16
+"""
+
+from alembic import op
+import sqlalchemy as sa
+
+
+revision = "0005"
+down_revision = "0004"
+branch_labels = None
+depends_on = None
+
+
+def upgrade() -> None:
+    op.add_column(
+        "users",
+        sa.Column(
+            "last_logout_at",
+            sa.DateTime(timezone=True),
+            nullable=True
+        ),
+        schema="public"
+    )
+
+
+def downgrade() -> None:
+    op.drop_column("users", "last_logout_at", schema="public")
