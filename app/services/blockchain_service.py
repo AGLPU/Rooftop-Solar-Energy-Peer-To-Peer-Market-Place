@@ -145,7 +145,32 @@ class BlockchainService:
         canonical = json.dumps(data, sort_keys=True, separators=(',', ':'))
         return hashlib.sha256(canonical.encode()).hexdigest()
 
-    def get_account(self) -> Optional[str]:
+    @staticmethod
+    def compute_purchase_hash(buyer_id: str, energy_kwh: int, price_eth: Decimal, listing_id: str) -> str:
+        """
+        Compute SHA256 hash of purchase data for integrity verification.
+        
+        This hash is stored immutably on blockchain and verified before consumption.
+        If any field is tampered with in DB, hash verification fails.
+        
+        Args:
+            buyer_id: UUID of buyer
+            energy_kwh: Amount of energy purchased
+            price_eth: Price paid in ETH
+            listing_id: UUID of listing being purchased
+            
+        Returns:
+            SHA256 hex digest of canonical purchase data
+        """
+        data = {
+            "buyer_id": str(buyer_id),
+            "energy_kwh": int(energy_kwh),
+            "price_eth": str(price_eth),
+            "listing_id": str(listing_id),
+        }
+        # Sort keys for deterministic ordering - same hash for same data
+        canonical = json.dumps(data, sort_keys=True, separators=(',', ':'))
+        return hashlib.sha256(canonical.encode()).hexdigest()
         """Get platform account address"""
         if not self.is_available():
             return None
@@ -215,7 +240,7 @@ class BlockchainService:
 
             signed_txn = self.w3.eth.account.sign_transaction(transaction, private_key)
             logger.info(f"Submitting mintEnergy transaction for listing {listing_id}")
-            return self._submit_transaction(signed_txn)
+            return self._submit_transaction(signed_txn, wait_for_receipt=False)
 
         except Exception as e:
             logger.error(f"Error minting energy: {e}")
@@ -259,10 +284,11 @@ class BlockchainService:
         buyer_address: str,
         energy_kwh: int,
         price_eth: Decimal,
-        listing_id: str = ""
+        listing_id: str = "",
+        purchase_hash: str = ""
     ) -> Optional[str]:
         """
-        Record energy purchase on blockchain
+        Record energy purchase on blockchain with integrity verification.
 
         Args:
             seller_address: Seller's Ethereum address
@@ -270,6 +296,7 @@ class BlockchainService:
             energy_kwh: Amount of energy purchased
             price_eth: Price paid in ETH
             listing_id: DB listing UUID — for tracking purchases per listing
+            purchase_hash: SHA256 hash of purchase data for integrity verification
 
         Returns:
             Transaction hash or None
@@ -289,12 +316,17 @@ class BlockchainService:
             # Convert price to wei
             price_wei = self._Web3.to_wei(float(price_eth), 'ether')
 
+            # Convert purchase_hash hex string to bytes32
+            purchase_hash_bytes = bytes.fromhex(purchase_hash) if purchase_hash else bytes(32)
+
+            # Call smart contract with purchase hash for integrity verification
             transaction = self.contract.functions.recordPurchase(
                 self._Web3.to_checksum_address(seller_address),
                 self._Web3.to_checksum_address(buyer_address),
                 energy_kwh,
                 price_wei,
-                listing_id
+                listing_id,
+                purchase_hash_bytes  # ← NEW: Purchase data integrity hash
             ).build_transaction({
                 'from': account.address,
                 'nonce': nonce,
@@ -304,7 +336,7 @@ class BlockchainService:
 
             signed_txn = self.w3.eth.account.sign_transaction(transaction, private_key)
 
-            return self._submit_transaction(signed_txn)
+            return self._submit_transaction(signed_txn, wait_for_receipt=False)
 
         except Exception as e:
             logger.error(f"Error recording purchase: {e}")
@@ -393,6 +425,47 @@ class BlockchainService:
         except Exception as e:
             logger.error(f"Error consuming energy: {e}")
             return None
+
+    def verify_purchase_integrity(
+        self,
+        buyer_id: str,
+        energy_kwh: int,
+        price_eth: Decimal,
+        listing_id: str,
+        stored_purchase_hash: str
+    ) -> tuple[bool, str]:
+        """
+        Verify purchase data integrity by comparing calculated hash with stored hash.
+        
+        Args:
+            buyer_id: UUID of buyer
+            energy_kwh: Amount of energy purchased
+            price_eth: Price paid in ETH
+            listing_id: UUID of listing
+            stored_purchase_hash: Hash stored during purchase creation
+            
+        Returns:
+            Tuple of (is_valid: bool, message: str)
+            - (True, "Purchase data verified") if hashes match
+            - (False, "Purchase data was tampered") if hashes don't match
+        """
+        if not stored_purchase_hash:
+            return False, "No purchase hash stored - cannot verify integrity"
+        
+        # Recalculate hash from current data
+        current_hash = self.compute_purchase_hash(
+            buyer_id=buyer_id,
+            energy_kwh=energy_kwh,
+            price_eth=price_eth,
+            listing_id=listing_id
+        )
+        
+        # Compare hashes
+        if current_hash == stored_purchase_hash:
+            return True, "Purchase data verified"
+        else:
+            logger.warning(f"Purchase tampering detected: stored={stored_purchase_hash}, current={current_hash}")
+            return False, f"Purchase data was modified. Original hash: {stored_purchase_hash}, Current hash: {current_hash}"
 
     # ─── Admin Read-Only Methods ──────────────────────────────────────────────
     # Admin has NO wallet, NO private key, makes NO transactions.
@@ -561,11 +634,19 @@ class BlockchainService:
 
     def _submit_transaction(
             self,
-            signed_txn
+            signed_txn,
+            wait_for_receipt: bool = False
         ) -> Optional[str]:
             """
-            Submit transaction and wait for receipt.
-            Returns tx hash even if receipt times out.
+            Submit transaction.
+            
+            Args:
+                signed_txn: Signed transaction object
+                wait_for_receipt: If True, wait for confirmation (blocking).
+                                 If False, return tx hash immediately (non-blocking).
+            
+            Returns:
+                Transaction hash or None if failed to submit
             """
 
             try:
@@ -581,6 +662,14 @@ class BlockchainService:
                 f"Transaction submitted: {tx_hash.hex()}"
             )
 
+            # If not waiting for receipt, return immediately
+            if not wait_for_receipt:
+                logger.info(
+                    f"Non-blocking mode: returning tx hash immediately: {tx_hash.hex()}"
+                )
+                return tx_hash.hex()
+
+            # Otherwise, wait for confirmation (blocking)
             try:
                 receipt = self.w3.eth.wait_for_transaction_receipt(
                     tx_hash,

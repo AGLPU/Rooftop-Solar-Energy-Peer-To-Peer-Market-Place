@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Integer, Numeric, DateTime, ForeignKey, Enum as SQLEnum
+from sqlalchemy import Column, String, Integer, Numeric, DateTime, ForeignKey, Enum as SQLEnum, Boolean
 from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.postgresql import UUID
 from datetime import datetime
@@ -46,11 +46,13 @@ class Purchase(Base):
     # Blockchain
     blockchain_tx_hash = Column(String(66), nullable=True)  # Ethereum transaction hash (purchase)
     consume_tx_hash = Column(String(66), nullable=True)      # Ethereum transaction hash (burn)
+    purchase_hash = Column(String(64), nullable=True)        # SHA256 hash of purchase data (immutable proof)
 
     # Timestamps
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     completed_at = Column(DateTime, nullable=True)   # When purchase completed
     consumed_at = Column(DateTime, nullable=True)    # When energy was consumed (tokens burned)
+    is_tampered = Column(Boolean, default=False, nullable=False)
 
     # Relationships
     buyer = relationship("User", foreign_keys=[buyer_id], back_populates="purchases")

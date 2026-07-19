@@ -23,9 +23,16 @@ class PurchaseResponse(BaseModel):
     status: str
     blockchain_tx_hash: Optional[str] = None   # tx hash when tokens were transferred (purchase)
     consume_tx_hash: Optional[str] = None      # tx hash when tokens were burned (consumed)
+    purchase_hash: Optional[str] = None        # SHA256 hash of purchase data for integrity verification
+    is_tampered: bool = False                  # True if purchase data was modified after creation
     created_at: datetime
     completed_at: Optional[datetime] = None
     consumed_at: Optional[datetime] = None
 
     model_config = ConfigDict(from_attributes=True)
+
+    @property
+    def can_consume(self) -> bool:
+        """Buyer can consume energy only if purchase is completed and not tampered"""
+        return self.status == "COMPLETED" and not self.is_tampered
 

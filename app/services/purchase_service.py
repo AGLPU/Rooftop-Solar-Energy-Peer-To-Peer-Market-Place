@@ -125,12 +125,23 @@ class PurchaseService:
         seller = db.query(User).filter(User.id == listing.seller_id).first()
         if seller and seller.wallet_address and buyer.wallet_address:
             blockchain = get_blockchain_service()
+            
+            # Calculate purchase hash for integrity verification
+            purchase_hash = blockchain.compute_purchase_hash(
+                buyer_id=str(buyer.id),
+                energy_kwh=payload.energy_kwh,
+                price_eth=total_price,
+                listing_id=str(listing.id)
+            )
+            purchase.purchase_hash = purchase_hash
+            
             tx_hash = blockchain.record_purchase(
                 seller_address=seller.wallet_address,
                 buyer_address=buyer.wallet_address,
                 energy_kwh=payload.energy_kwh,
                 price_eth=total_price,
-                listing_id=str(listing.id)
+                listing_id=str(listing.id),
+                purchase_hash=purchase_hash
             )
             if tx_hash:
                 purchase.blockchain_tx_hash = tx_hash
@@ -154,7 +165,7 @@ class PurchaseService:
         return purchase
 
     def get_purchase(self, db: Session, purchase_id: UUID, user: User) -> Purchase:
-        """Get a single purchase by ID"""
+        """Get a single purchase by ID with integrity verification"""
         purchase = db.query(Purchase).filter(Purchase.id == purchase_id).first()
 
         if not purchase:
@@ -170,6 +181,22 @@ class PurchaseService:
                     status_code=status.HTTP_403_FORBIDDEN,
                     detail="You can only view your own purchases"
                 )
+
+        # Verify purchase integrity (check if DB data matches stored hash)
+        if purchase.purchase_hash and purchase.status == PurchaseStatus.COMPLETED:
+            blockchain = get_blockchain_service()
+            is_valid, message = blockchain.verify_purchase_integrity(
+                buyer_id=str(purchase.buyer_id),
+                energy_kwh=purchase.energy_kwh,
+                price_eth=purchase.total_price,
+                listing_id=str(purchase.listing_id),
+                stored_purchase_hash=purchase.purchase_hash
+            )
+            
+            if not is_valid:
+                purchase.is_tampered = True
+                db.commit()
+                logger.warning(f"Purchase {purchase_id} marked as tampered: {message}")
 
         return purchase
 
@@ -281,6 +308,7 @@ class PurchaseService:
 
         Only the buyer who owns the purchase can consume it.
         Purchase must be in COMPLETED status before it can be consumed.
+        Must pass integrity check (purchase data not tampered).
         """
         purchase = db.query(Purchase).filter(Purchase.id == purchase_id).first()
 
@@ -310,10 +338,29 @@ class PurchaseService:
                 detail="Buyer must have a wallet address to consume energy"
             )
 
+        # ── Verify Purchase Integrity ───────────────────────────────────────────
+        # Check if purchase data was tampered with (any field changed in DB)
+        blockchain = get_blockchain_service()
+        if purchase.purchase_hash:
+            is_valid, message = blockchain.verify_purchase_integrity(
+                buyer_id=str(purchase.buyer_id),
+                energy_kwh=purchase.energy_kwh,
+                price_eth=purchase.total_price,
+                listing_id=str(purchase.listing_id),
+                stored_purchase_hash=purchase.purchase_hash
+            )
+            
+            if not is_valid:
+                purchase.is_tampered = True
+                db.commit()
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Purchase data has been modified and cannot be consumed. Please contact support."
+                )
+
         # ── Blockchain: Burn SEC tokens from buyer's wallet ────────────────
         # Backend (Account #0) calls consumeEnergyFor(buyer, kwh)
         # This DESTROYS the tokens — permanent proof that energy was actually used
-        blockchain = get_blockchain_service()
         tx_hash = blockchain.consume_energy_for(
             buyer_address=buyer.wallet_address,
             energy_kwh=purchase.energy_kwh
