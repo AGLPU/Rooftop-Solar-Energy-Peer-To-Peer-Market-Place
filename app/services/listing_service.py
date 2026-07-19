@@ -4,6 +4,7 @@ from uuid import UUID
 from datetime import datetime, timezone
 from typing import List, Optional
 import json
+import logging
 
 from app.models.listing import Listing, ListingStatus, EnergySource
 from app.models.user import User, UserRole
@@ -11,6 +12,8 @@ from app.schemas.listing import ListingCreateRequest, ListingUpdateRequest
 from app.services.blockchain_service import get_blockchain_service
 from app.services.audit_service import AuditService
 from app.models.audit import AuditEventType
+
+logger = logging.getLogger(__name__)
 class ListingService:
     """Service for energy listing operations"""
 
