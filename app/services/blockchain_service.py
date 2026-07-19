@@ -209,7 +209,7 @@ class BlockchainService:
             ).build_transaction({
                 'from': account.address,
                 'nonce': nonce,
-                'gas': 400000,  # Increased from 300000 to account for new parameters
+                'gas': 800000,  # Increased significantly - storing listing record + snapshots + purchase array
                 'gasPrice': self.w3.eth.gas_price,
             })
 
@@ -298,7 +298,7 @@ class BlockchainService:
             ).build_transaction({
                 'from': account.address,
                 'nonce': nonce,
-                'gas': 350000,  # Increased to account for new listingId parameter and purchase tracking
+                'gas': 500000,  # Increased significantly - adding purchase to array
                 'gasPrice': self.w3.eth.gas_price,
             })
 
