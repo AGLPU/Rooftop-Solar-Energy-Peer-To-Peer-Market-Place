@@ -89,16 +89,18 @@ def get_active_listings(
     "/my-listings",
     response_model=List[ListingResponse],
     summary="Get my listings",
-    description="Get all listings created by the current user"
+    description="Get all listings created by the current user with optional filters"
 )
 def get_my_listings(
     skip: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
+    status: Optional[ListingStatus] = Query(None, description="Filter by status (ACTIVE, SOLD, EXPIRED, CANCELLED)"),
+    energy_source: Optional[EnergySource] = Query(None, description="Filter by energy source (SOLAR, WIND, HYDRO, BIOMASS, GEOTHERMAL, TIDAL, OTHER)"),
     db: Session = Depends(get_read_db),
     current_user: User = Depends(get_current_active_user),
     svc: ListingService = Depends(get_listing_service)
 ):
-    return svc.get_all_listings(db, skip=skip, limit=limit, seller_id=current_user.id, current_user=current_user)
+    return svc.get_all_listings(db, skip=skip, limit=limit, status=status, seller_id=current_user.id, energy_source=energy_source, current_user=current_user)
 
 
 # ─── Get Single Listing ──────────────────────────────────────────────────────
