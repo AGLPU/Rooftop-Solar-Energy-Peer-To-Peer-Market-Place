@@ -12,9 +12,6 @@ engine = create_engine(
     max_overflow=20,       # Extra connections if needed
     pool_recycle=3600,     # Recycle connections after 1 hour
     echo=settings.debug,   # Show SQL queries when debugging
-    connect_args={
-        "options": f"-csearch_path={settings.database_schema},public"
-    }
 )
 
 # Set schema for each writer connection
@@ -34,9 +31,6 @@ if settings.db_read_url:
         max_overflow=20,
         pool_recycle=3600,
         echo=settings.debug,
-        connect_args={
-            "options": f"-csearch_path={settings.database_schema},public"
-        }
     )
 
     # Set schema for read replica connections

@@ -45,6 +45,7 @@ class Listing(Base):
 
     # Energy details
     energy_kwh = Column(Integer, nullable=False)
+    original_energy_kwh = Column(Integer, nullable=False)  # IMMUTABLE - stored on blockchain
     price_per_kwh = Column(Numeric(10, 6), nullable=False)
     energy_source = Column(
         SQLEnum(EnergySource, values_callable=lambda x: [e.value for e in x]),

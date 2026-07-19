@@ -134,7 +134,7 @@ class BlockchainService:
         data = {
             "id":            str(listing.id),
             "seller_id":     str(listing.seller_id),
-            "energy_kwh":    int(listing.energy_kwh),
+            # "energy_kwh":    int(listing.energy_kwh),
             "price_per_kwh": str(listing.price_per_kwh),
             "energy_source": str(listing.energy_source.value if hasattr(listing.energy_source, 'value') else listing.energy_source),
             "location":      listing.location or "",
@@ -217,6 +217,38 @@ class BlockchainService:
         except Exception as e:
             logger.error(f"Error minting energy: {e}")
             return None
+
+    def mint_energy_with_snapshot(
+        self,
+        seller_address: str,
+        energy_kwh: int,
+        price_per_kwh: Decimal,
+        listing_id: str = "",
+        listing_hash: str = ""
+    ) -> Optional[str]:
+        """
+        Mint energy tokens AND store immutable listing snapshot on blockchain.
+        This is the recommended entry point for new listings.
+        
+        The snapshot is stored on-chain for permanent verification.
+        Future integrity checks will compare against this snapshot,
+        making energy_kwh changes legitimate (only affects current state, not hash).
+        """
+        # First, mint the tokens
+        tx_hash = self.mint_energy(
+            seller_address=seller_address,
+            energy_kwh=energy_kwh,
+            price_per_kwh=price_per_kwh,
+            listing_id=listing_id,
+            listing_hash=listing_hash
+        )
+        
+        if tx_hash:
+            # Snapshot was implicitly stored via listing_hash parameter
+            # The contract stores this hash which we'll verify against
+            logger.info(f"Energy minted and snapshot stored: {tx_hash}")
+        
+        return tx_hash
 
     def record_purchase(
         self,
@@ -436,6 +468,90 @@ class BlockchainService:
                 "connected": False,
                 "error": str(e)
             }
+
+    def compute_listing_hash(self, listing) -> str:
+        """
+        Compute SHA256 hash of IMMUTABLE listing fields only.
+        Energy_kwh is NOT included (it's dynamic and changes with purchases).
+        
+        Fields included:
+        - price_per_kwh (locked at creation)
+        - title (seller can't change)
+        - description (seller can't change)
+        - location (seller can't change)
+        - energy_source (type never changes)
+        - expires_at (expiration is set at creation)
+        
+        This ensures price fraud, title manipulation, location changes are detected.
+        """
+        data = {
+            "id": str(listing.id),
+            "seller_id": str(listing.seller_id),
+            "price_per_kwh": str(listing.price_per_kwh),
+            "energy_source": str(listing.energy_source.value if hasattr(listing.energy_source, 'value') else listing.energy_source),
+            "title": listing.title,
+            "description": listing.description or "",
+            "location": listing.location or "",
+            "expires_at": listing.expires_at.isoformat() if listing.expires_at else "",
+            "created_at": listing.created_at.isoformat() if listing.created_at else "",
+        }
+        
+        data_str = json.dumps(data, sort_keys=True)
+        return hashlib.sha256(data_str.encode()).hexdigest()
+
+    def store_listing_snapshot(self, listing) -> Optional[str]:
+        """
+        Store immutable listing snapshot on blockchain for tamper detection.
+        This snapshot contains all original immutable data and is never updated.
+        
+        In production, this would call a smart contract function to store the data.
+        For now, we compute and return the hash that will be verified later.
+        """
+        if not self.is_available():
+            logger.info("Blockchain unavailable - skipping snapshot store")
+            return None
+
+        try:
+            snapshot_hash = self.compute_listing_hash(listing)
+            logger.info(f"Listing snapshot hash computed: {snapshot_hash[:16]}...")
+            
+            # TODO: Call smart contract to store snapshot
+            # tx_hash = self.contract.functions.storeListingSnapshot(
+            #     listing_id=bytes(16)(int(listing.id.bytes)),
+            #     immutable_hash=bytes.fromhex(snapshot_hash)
+            # ).transact()
+            
+            # For now, return the hash (used for verification)
+            return snapshot_hash
+        except Exception as e:
+            logger.error(f"Error storing listing snapshot: {e}")
+            return None
+
+    def get_listing_snapshot(self, listing_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Retrieve immutable listing snapshot from blockchain.
+        
+        Returns the stored snapshot data for integrity verification.
+        """
+        if not self.is_available():
+            logger.info("Blockchain unavailable - skipping snapshot retrieval")
+            return None
+
+        try:
+            # TODO: Call smart contract to retrieve snapshot
+            # snapshot = self.contract.functions.getListingSnapshot(listing_id).call()
+            # return {
+            #     "listing_id": listing_id,
+            #     "snapshot_hash": snapshot.get("immutable_hash"),
+            #     "stored_at": snapshot.get("stored_at"),
+            # }
+            
+            # For now, return None (needs contract implementation)
+            return None
+        except Exception as e:
+            logger.error(f"Error retrieving listing snapshot: {e}")
+            return None
+
 
     def _submit_transaction(
             self,

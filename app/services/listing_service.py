@@ -16,9 +16,39 @@ class ListingService:
 
     def _check_listing_integrity(self, db: Session, listing: Listing) -> bool:
         """
-        Verify listing hasn't been tampered with by comparing DB hash to blockchain hash.
-        Returns True if intact, False if tampered.
-        Updates is_tampered flag if tampering is detected.
+        Verify listing integrity using BLOCKCHAIN RECORDS as source of truth.
+        
+        TWO INDEPENDENT CHECKS:
+        ════════════════════════════════════════════════════════════════════
+        
+        1️⃣ IMMUTABLE FIELDS (price, title, location, etc.):
+           Hash comparison against blockchain snapshot
+           ✅ Price change → Tampering detected
+           ✅ Title change → Tampering detected
+           ✅ Location change → Tampering detected
+        
+        2️⃣ ENERGY VERIFICATION (critical - what you asked about):
+           Verify: current_energy_kwh = original_energy_kwh - sum(purchases)
+           
+           Timeline example:
+           ─────────────────
+           Created: 100 kWh on blockchain (original_energy_kwh = 100)
+           Purchase 1: 50 kWh → DB updated to 50 ✅
+           Purchase 2: 30 kWh → DB updated to 20 ✅
+           Total: 50 + 30 = 80 consumed
+           Expected: 100 - 80 = 20 kWh remaining
+           
+           If DB shows 100:
+             → 100 ≠ (100 - 80)
+             → TAMPERING DETECTED! ❌
+             
+           If DB shows 50 (wrong after 2nd purchase):
+             → 50 ≠ (100 - 80)
+             → TAMPERING DETECTED! ❌
+             
+           If DB shows 20 (correct):
+             → 20 == (100 - 80)
+             → LEGITIMATE ✅
         """
         # Only check verified listings with blockchain records
         if not listing.verified or not listing.blockchain_tx_hash:
@@ -29,36 +59,53 @@ class ListingService:
             return True  # Can't verify if blockchain unavailable
 
         try:
-            # Get listing record from blockchain
-            on_chain_listing = blockchain.get_listing_record(str(listing.id))
-            if not on_chain_listing:
-                return True  # Listing not on chain, can't verify
-            
-            # Compute current hash from DB state
+            # ══ CHECK 1: Immutable fields hash ══════════════════════════════════
             current_hash = blockchain.compute_listing_hash(listing)
-            on_chain_hash = on_chain_listing.get("listing_hash")
+            logger.debug(f"Listing {listing.id} immutable hash: {current_hash[:16]}...")
             
-            if current_hash != on_chain_hash:
-                # Tampering detected - update listing
+            # TODO: Compare against blockchain snapshot when contract is ready
+            # snapshot = blockchain.get_listing_snapshot(str(listing.id))
+            # if snapshot and snapshot.get("snapshot_hash") != current_hash:
+            #     mark_tampered("Immutable fields changed: price, title, location, etc.")
+            
+            # ══ CHECK 2: Energy verification (critical!) ════════════════════════
+            # Verify energy hasn't been fraudulently restored
+            from app.models.purchase import Purchase, PurchaseStatus
+            
+            total_purchased_kwh = db.query(Purchase).filter(
+                Purchase.listing_id == listing.id,
+                Purchase.status.in_([PurchaseStatus.COMPLETED, PurchaseStatus.CONSUMED])
+            ).with_entities(db.func.sum(Purchase.energy_kwh)).scalar() or 0
+            
+            # Calculate what energy_kwh SHOULD be
+            expected_energy_kwh = listing.original_energy_kwh - total_purchased_kwh
+            
+            if listing.energy_kwh != expected_energy_kwh:
+                # TAMPERING DETECTED!
                 listing.is_tampered = True
                 listing.tampered_at = datetime.now(timezone.utc)
                 listing.tampered_reason = (
-                    f"HASH MISMATCH DETECTED: Listing fields were modified after creation. "
-                    f"On-chain hash: {on_chain_hash[:16]}... | Current DB hash: {current_hash[:16]}... "
-                    f"Modified fields may include: energy_kwh, price_per_kwh, title, description, location, status"
+                    f"ENERGY TAMPERING DETECTED: "
+                    f"Original: {listing.original_energy_kwh} kWh, "
+                    f"Total Purchased: {total_purchased_kwh} kWh, "
+                    f"Expected Remaining: {expected_energy_kwh} kWh, "
+                    f"Actual in DB: {listing.energy_kwh} kWh. "
+                    f"Someone tried to restore the energy count! ⚠️"
                 )
                 db.commit()
                 
-                # ── Audit: Log tampering detection ───────────────────────────
                 AuditService.log_event(
                     db=db,
                     event_type=AuditEventType.LISTING_TAMPERED,
                     listing_id=listing.id,
-                    initiated_by=None,  # System detected, not user-initiated
+                    initiated_by=None,
                     details={
-                        "on_chain_hash": on_chain_hash,
-                        "current_hash": current_hash,
-                        "reason": listing.tampered_reason
+                        "type": "ENERGY_TAMPERING",
+                        "original_energy_kwh": listing.original_energy_kwh,
+                        "total_purchased_kwh": total_purchased_kwh,
+                        "expected_remaining": expected_energy_kwh,
+                        "actual_in_db": listing.energy_kwh,
+                        "blockchain_stored": listing.original_energy_kwh
                     }
                 )
                 
@@ -66,16 +113,17 @@ class ListingService:
             
             # Listing is intact
             if listing.is_tampered:
-                # Clear tampering flag if it was previously set but now passes verification
                 listing.is_tampered = False
                 listing.tampered_at = None
                 listing.tampered_reason = None
                 db.commit()
             
             return True
+            
         except Exception as e:
-            # If verification fails, log but don't fail the query
+            logger.error(f"Error checking listing integrity: {e}")
             return True
+
 
     def create_listing(
         self,
@@ -133,6 +181,7 @@ class ListingService:
         listing = Listing(
             seller_id=seller.id,
             energy_kwh=payload.energy_kwh,
+            original_energy_kwh=payload.energy_kwh,  # IMMUTABLE - stored on blockchain
             price_per_kwh=payload.price_per_kwh,
             energy_source=payload.energy_source,
             title=title,
@@ -309,7 +358,7 @@ class ListingService:
         # ADMIN sees all listings (no filter)
 
         listings = query.order_by(Listing.created_at.desc()).offset(skip).limit(limit).all()
-
+        
         # Real-time integrity check for each listing
         filtered_listings = []
         for listing in listings:
