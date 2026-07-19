@@ -1,4 +1,5 @@
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from fastapi import HTTPException, status
 from uuid import UUID
 from datetime import datetime, timezone
@@ -79,7 +80,7 @@ class ListingService:
             total_purchased_kwh = db.query(Purchase).filter(
                 Purchase.listing_id == listing.id,
                 Purchase.status.in_([PurchaseStatus.COMPLETED, PurchaseStatus.CONSUMED])
-            ).with_entities(db.func.sum(Purchase.energy_kwh)).scalar() or 0
+            ).with_entities(func.sum(Purchase.energy_kwh)).scalar() or 0
             
             # Calculate what energy_kwh SHOULD be
             expected_energy_kwh = listing.original_energy_kwh - total_purchased_kwh
