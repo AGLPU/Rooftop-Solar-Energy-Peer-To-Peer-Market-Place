@@ -195,6 +195,8 @@ class BlockchainService:
 
             # Convert hex hash string to bytes32
             hash_bytes = bytes.fromhex(listing_hash) if listing_hash else bytes(32)
+            
+            logger.debug(f"Minting energy: seller={seller_address}, kwh={energy_kwh}, price_micro={price_micro}, listing_id={listing_id}, hash={listing_hash[:16]}...")
 
             nonce = self.w3.eth.get_transaction_count(account.address,"pending")
 
@@ -207,11 +209,12 @@ class BlockchainService:
             ).build_transaction({
                 'from': account.address,
                 'nonce': nonce,
-                'gas': 300000,
+                'gas': 400000,  # Increased from 300000 to account for new parameters
                 'gasPrice': self.w3.eth.gas_price,
             })
 
             signed_txn = self.w3.eth.account.sign_transaction(transaction, private_key)
+            logger.info(f"Submitting mintEnergy transaction for listing {listing_id}")
             return self._submit_transaction(signed_txn)
 
         except Exception as e:
@@ -295,7 +298,7 @@ class BlockchainService:
             ).build_transaction({
                 'from': account.address,
                 'nonce': nonce,
-                'gas': 250000,
+                'gas': 350000,  # Increased to account for new listingId parameter and purchase tracking
                 'gasPrice': self.w3.eth.gas_price,
             })
 
