@@ -351,12 +351,22 @@ class BlockchainService:
         """
         Transfer ETH payment from buyer to seller.
         
-        This sends ETH from the buyer's wallet to the seller's wallet.
-        The backend (contract owner) facilitates this transfer.
+        The backend (contract owner) acts as an intermediary for payment transfers.
+        This is necessary because:
+        1. Buyers' private keys are not stored on the backend
+        2. The backend holds the only private key available
+        3. This centralizes payment processing safely
+        
+        Flow:
+        - Backend sends ETH to seller on behalf of the buyer
+        - In production, this should be replaced with:
+          a) Buyer signs payment transaction themselves (via MetaMask)
+          b) Or use a payment processor (Stripe, PayPal)
+          c) Or require ETH deposit from buyer first
 
         Args:
-            buyer_address: Buyer's Ethereum address
-            seller_address: Seller's Ethereum address
+            buyer_address: Buyer's Ethereum address (for logging/verification)
+            seller_address: Seller's Ethereum address (recipient)
             amount_eth: Amount to transfer in ETH
 
         Returns:
@@ -377,13 +387,20 @@ class BlockchainService:
             # Convert ETH to wei
             amount_wei = self._Web3.to_wei(float(amount_eth), 'ether')
             
-            logger.debug(f"Transferring payment: from {buyer_address} to {seller_address}, amount={amount_eth} ETH ({amount_wei} wei)")
+            logger.debug(f"Transferring payment: buyer={buyer_address}, seller={seller_address}, amount={amount_eth} ETH ({amount_wei} wei)")
+            
+            # Check if account has sufficient balance
+            balance = self.w3.eth.get_balance(account.address)
+            if balance < amount_wei:
+                logger.error(f"Insufficient balance: {self.w3.from_wei(balance, 'ether')} ETH < {amount_eth} ETH needed")
+                return None
             
             nonce = self.w3.eth.get_transaction_count(account.address, "pending")
             
-            # Create a simple ETH transfer transaction
+            # Create ETH transfer transaction FROM backend TO seller
+            # Backend facilitates the payment on behalf of the buyer
             transaction = {
-                'from': self._Web3.to_checksum_address(buyer_address),
+                'from': account.address,  # ← Backend account (has private key)
                 'to': self._Web3.to_checksum_address(seller_address),
                 'value': amount_wei,
                 'gas': 21000,  # Standard ETH transfer gas
@@ -392,7 +409,7 @@ class BlockchainService:
             }
             
             signed_txn = self.w3.eth.account.sign_transaction(transaction, private_key)
-            logger.info(f"Submitting payment transfer: {amount_eth} ETH to {seller_address}")
+            logger.info(f"Submitting payment transfer: {amount_eth} ETH from backend to {seller_address} (on behalf of {buyer_address})")
             return self._submit_transaction(signed_txn, wait_for_receipt=False)
 
         except Exception as e:
