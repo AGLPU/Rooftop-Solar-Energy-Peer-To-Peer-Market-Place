@@ -33,12 +33,16 @@ def get_blockchain_status():
 
 @router.get(
     "/balance/{wallet_address}",
-    summary="Get SEC token balance of a wallet",
+    summary="Get wallet balances (SEC tokens and ETH)",
     description=(
-        "Returns how many SEC (Solar Energy Credit) tokens a wallet currently holds.\n\n"
-        "- This is a **free read** — no gas, no transaction.\n"
-        "- Balance is in **kWh** (1 SEC token = 1 kWh).\n"
-        "- Use this to verify that tokens were **minted** to a seller after listing creation."
+        "Returns both SEC token balance and ETH balance for a wallet.\n\n"
+        "SEC Tokens (Energy):\n"
+        "- How many kWh of solar energy the wallet holds\n"
+        "- 1 SEC token = 1 kWh\n\n"
+        "ETH (Actual Money):\n"
+        "- How much ETH the wallet has\n"
+        "- Used to purchase energy listings\n\n"
+        "Both are **free reads** — no gas, no transaction."
     )
 )
 def get_token_balance(wallet_address: str):
@@ -48,12 +52,32 @@ def get_token_balance(wallet_address: str):
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Blockchain service is not available"
         )
-    balance = blockchain.get_energy_balance(wallet_address)
+    
+    # Get SEC token balance
+    sec_balance = blockchain.get_energy_balance(wallet_address)
+    
+    # Get ETH balance
+    eth_balance_data = blockchain.get_eth_balance(wallet_address)
+    
     return {
         "wallet_address": wallet_address,
-        "balance_kwh": balance,
-        "balance_sec_tokens": balance,
-        "note": "1 SEC token = 1 kWh of solar energy"
+        "sec_tokens": {
+            "balance_kwh": sec_balance,
+            "balance_sec_tokens": sec_balance,
+            "note": "1 SEC token = 1 kWh of solar energy",
+            "type": "Energy Tokens"
+        },
+        "eth": {
+            "balance_eth": float(eth_balance_data["balance_eth"]) if eth_balance_data else None,
+            "balance_wei": eth_balance_data["balance_wei"] if eth_balance_data else None,
+            "note": "Actual ETH (money) in the wallet for purchases",
+            "type": "Native Currency"
+        },
+        "summary": {
+            "energy_available_kwh": sec_balance,
+            "funds_available_eth": float(eth_balance_data["balance_eth"]) if eth_balance_data else None,
+            "can_purchase": sec_balance is not None and eth_balance_data is not None
+        }
     }
 
 

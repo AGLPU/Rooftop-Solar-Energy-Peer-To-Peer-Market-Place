@@ -436,6 +436,31 @@ class BlockchainService:
             logger.error(f"Error getting balance: {e}")
             return None
 
+    def get_eth_balance(self, address: str) -> Optional[Dict[str, Any]]:
+        """
+        Get ETH balance for an address (actual money, not tokens)
+        
+        Returns:
+            Dict with eth_balance (in ETH) and wei_balance (in wei)
+        """
+        if not self.is_available():
+            return None
+
+        try:
+            balance_wei = self.w3.eth.get_balance(
+                self._Web3.to_checksum_address(address)
+            )
+            balance_eth = self.w3.from_wei(balance_wei, 'ether')
+            
+            return {
+                "balance_eth": str(balance_eth),
+                "balance_wei": str(balance_wei),
+                "balance_float": float(balance_eth)
+            }
+        except Exception as e:
+            logger.error(f"Error getting ETH balance: {e}")
+            return None
+
     def consume_energy_for(
         self,
         buyer_address: str,
