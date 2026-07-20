@@ -383,19 +383,40 @@ class BlockchainService:
                 return None
 
             account = self.w3.eth.account.from_key(private_key)
+            logger.info(f"[PAYMENT] Backend account: {account.address}")
             
             # Convert ETH to wei
             amount_wei = self._Web3.to_wei(float(amount_eth), 'ether')
+            logger.info(f"[PAYMENT] Converting {amount_eth} ETH to {amount_wei} wei")
             
-            logger.debug(f"Transferring payment: buyer={buyer_address}, seller={seller_address}, amount={amount_eth} ETH ({amount_wei} wei)")
+            logger.info(f"[PAYMENT] Transfer details: buyer={buyer_address}, seller={seller_address}, amount={amount_eth} ETH")
             
             # Check if account has sufficient balance
             balance = self.w3.eth.get_balance(account.address)
+            balance_eth = self.w3.from_wei(balance, 'ether')
+            logger.info(f"[PAYMENT] Backend account balance: {balance_eth} ETH ({balance} wei)")
+            
             if balance < amount_wei:
-                logger.error(f"Insufficient balance: {self.w3.from_wei(balance, 'ether')} ETH < {amount_eth} ETH needed")
+                logger.error(f"[PAYMENT] ❌ INSUFFICIENT BALANCE: {balance_eth} ETH < {amount_eth} ETH needed")
                 return None
+            logger.info(f"[PAYMENT] ✓ Balance sufficient")
             
             nonce = self.w3.eth.get_transaction_count(account.address, "pending")
+            logger.info(f"[PAYMENT] Nonce: {nonce}")
+            
+            # Get gas estimates for EIP-1559 (modern Ethereum/Sepolia)
+            try:
+                gas_price_data = self.w3.eth.fee_history(1, 'latest')
+                base_fee = gas_price_data['baseFeePerGas'][0]
+                max_priority_fee = self.w3.to_wei(1, 'gwei')  # 1 gwei priority for Sepolia
+                max_fee = base_fee + max_priority_fee
+                logger.info(f"[PAYMENT] EIP-1559 fees: baseFee={self.w3.from_wei(base_fee, 'gwei')} gwei, priorityFee={self.w3.from_wei(max_priority_fee, 'gwei')} gwei, maxFee={self.w3.from_wei(max_fee, 'gwei')} gwei")
+            except Exception as e:
+                logger.warning(f"[PAYMENT] ⚠️  Could not get EIP-1559 fees, falling back to legacy gasPrice: {e}")
+                # Fallback for networks that don't support EIP-1559
+                max_fee = self.w3.eth.gas_price
+                max_priority_fee = self.w3.eth.gas_price
+                logger.info(f"[PAYMENT] Using legacy gasPrice: {self.w3.from_wei(max_fee, 'gwei')} gwei")
             
             # Create ETH transfer transaction FROM backend TO seller
             # Backend facilitates the payment on behalf of the buyer
@@ -404,13 +425,19 @@ class BlockchainService:
                 'to': self._Web3.to_checksum_address(seller_address),
                 'value': amount_wei,
                 'gas': 21000,  # Standard ETH transfer gas
-                'gasPrice': self.w3.eth.gas_price,
+                'maxFeePerGas': max_fee,  # EIP-1559: max fee per gas
+                'maxPriorityFeePerGas': max_priority_fee,  # EIP-1559: priority fee
                 'nonce': nonce,
             }
+            logger.info(f"[PAYMENT] Transaction object created: from={transaction['from']}, to={transaction['to']}, value={transaction['value']} wei")
             
             signed_txn = self.w3.eth.account.sign_transaction(transaction, private_key)
-            logger.info(f"Submitting payment transfer: {amount_eth} ETH from backend to {seller_address} (on behalf of {buyer_address})")
-            return self._submit_transaction(signed_txn, wait_for_receipt=False)
+            logger.info(f"[PAYMENT] ✓ Transaction signed successfully")
+            
+            logger.info(f"[PAYMENT] 📤 Submitting payment transfer: {amount_eth} ETH from backend to {seller_address} (on behalf of {buyer_address})")
+            tx_hash = self._submit_transaction(signed_txn, wait_for_receipt=False)
+            logger.info(f"[PAYMENT] Result: tx_hash={tx_hash}")
+            return tx_hash
 
         except Exception as e:
             logger.error(f"Error transferring payment: {e}")
@@ -755,43 +782,41 @@ class BlockchainService:
                 # Web3
                 raw_tx = signed_txn.raw_transaction
 
+            logger.info(f"[SUBMIT_TX] Sending raw transaction (length={len(raw_tx)} bytes)")
             tx_hash = self.w3.eth.send_raw_transaction(raw_tx)
 
-            logger.info(
-                f"Transaction submitted: {tx_hash.hex()}"
-            )
+            tx_hash_hex = tx_hash.hex()
+            logger.info(f"[SUBMIT_TX] ✅ Transaction submitted successfully: {tx_hash_hex}")
 
             # If not waiting for receipt, return immediately
             if not wait_for_receipt:
-                logger.info(
-                    f"Non-blocking mode: returning tx hash immediately: {tx_hash.hex()}"
-                )
-                return tx_hash.hex()
+                logger.info(f"[SUBMIT_TX] Non-blocking mode: returning tx hash immediately")
+                return tx_hash_hex
 
             # Otherwise, wait for confirmation (blocking)
             try:
+                logger.info(f"[SUBMIT_TX] Waiting for receipt (timeout=300s)...")
                 receipt = self.w3.eth.wait_for_transaction_receipt(
                     tx_hash,
                     timeout=300
                 )
 
                 if receipt["status"] == 1:
-                    logger.info(
-                        f"Transaction mined successfully: {tx_hash.hex()}"
-                    )
-                    return tx_hash.hex()
+                    logger.info(f"[SUBMIT_TX] ✅ Transaction mined successfully: {tx_hash_hex}")
+                    return tx_hash_hex
 
-                logger.error(
-                    f"Transaction mined but failed: {tx_hash.hex()}"
-                )
+                logger.error(f"[SUBMIT_TX] ❌ Transaction mined but failed: {tx_hash_hex}")
                 return None
 
             except TimeExhausted:
-                logger.warning(
-                    f"Receipt timeout, but tx submitted successfully: "
-                    f"{tx_hash.hex()}"
-                )
-                return tx_hash.hex()
+                logger.warning(f"[SUBMIT_TX] ⚠️  Receipt timeout, but tx submitted: {tx_hash_hex}")
+                return tx_hash_hex
+        
+        except Exception as e:
+            logger.error(f"[SUBMIT_TX] ❌ Failed to submit transaction: {type(e).__name__}: {e}")
+            import traceback
+            logger.error(f"[SUBMIT_TX] Traceback: {traceback.format_exc()}")
+            return None
 
 # Singleton instance
 _blockchain_service: Optional[BlockchainService] = None
