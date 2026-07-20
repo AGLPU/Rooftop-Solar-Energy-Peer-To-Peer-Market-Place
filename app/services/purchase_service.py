@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from typing import List
 import json
+import logging
 
 from app.models.purchase import Purchase, PurchaseStatus
 from app.models.listing import Listing, ListingStatus
@@ -13,6 +14,8 @@ from app.schemas.purchase import PurchaseCreateRequest
 from app.services.blockchain_service import get_blockchain_service
 from app.services.audit_service import AuditService
 from app.models.audit import AuditEventType
+
+logger = logging.getLogger(__name__)
 
 
 class PurchaseService:
@@ -150,6 +153,21 @@ class PurchaseService:
                 db.commit()
                 db.refresh(purchase)
                 
+                # ── Blockchain: Transfer payment from buyer to seller ──────────────
+                # Transfer ETH from buyer's wallet to seller's wallet
+                payment_tx_hash = blockchain.transfer_payment(
+                    buyer_address=buyer.wallet_address,
+                    seller_address=seller.wallet_address,
+                    amount_eth=total_price
+                )
+                if payment_tx_hash:
+                    purchase.payment_tx_hash = payment_tx_hash
+                    db.commit()
+                    db.refresh(purchase)
+                    logger.info(f"Payment transferred: {total_price} ETH from {buyer.username} to {seller.username}, tx={payment_tx_hash}")
+                else:
+                    logger.warning(f"Payment transfer failed for purchase {purchase.id}, but tokens were transferred. Manual payment may be required.")
+                
                 # ── Audit: Log purchase completion ───────────────────────────
                 AuditService.log_event(
                     db=db,
@@ -159,7 +177,11 @@ class PurchaseService:
                     energy_kwh=purchase.energy_kwh,
                     blockchain_tx_hash=tx_hash,
                     initiated_by=None,  # System/blockchain triggered
-                    details={"status": "COMPLETED"}
+                    details={
+                        "status": "COMPLETED",
+                        "payment_tx_hash": payment_tx_hash or "FAILED",
+                        "total_price": str(total_price)
+                    }
                 )
 
         return purchase

@@ -46,6 +46,7 @@ class Purchase(Base):
     # Blockchain
     blockchain_tx_hash = Column(String(66), nullable=True)  # Ethereum transaction hash (purchase)
     consume_tx_hash = Column(String(66), nullable=True)      # Ethereum transaction hash (burn)
+    payment_tx_hash = Column(String(66), nullable=True)      # Ethereum transaction hash (payment transfer)
     purchase_hash = Column(String(64), nullable=True)        # SHA256 hash of purchase data (immutable proof)
 
     # Timestamps

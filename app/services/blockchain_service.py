@@ -342,6 +342,63 @@ class BlockchainService:
             logger.error(f"Error recording purchase: {e}")
             return None
 
+    def transfer_payment(
+        self,
+        buyer_address: str,
+        seller_address: str,
+        amount_eth: Decimal
+    ) -> Optional[str]:
+        """
+        Transfer ETH payment from buyer to seller.
+        
+        This sends ETH from the buyer's wallet to the seller's wallet.
+        The backend (contract owner) facilitates this transfer.
+
+        Args:
+            buyer_address: Buyer's Ethereum address
+            seller_address: Seller's Ethereum address
+            amount_eth: Amount to transfer in ETH
+
+        Returns:
+            Transaction hash or None if blockchain unavailable
+        """
+        if not self.is_available():
+            logger.info("Blockchain unavailable - skipping payment transfer")
+            return None
+
+        try:
+            private_key = getattr(settings, 'blockchain_private_key', None)
+            if not private_key:
+                logger.error("No private key configured for payment transfer")
+                return None
+
+            account = self.w3.eth.account.from_key(private_key)
+            
+            # Convert ETH to wei
+            amount_wei = self._Web3.to_wei(float(amount_eth), 'ether')
+            
+            logger.debug(f"Transferring payment: from {buyer_address} to {seller_address}, amount={amount_eth} ETH ({amount_wei} wei)")
+            
+            nonce = self.w3.eth.get_transaction_count(account.address, "pending")
+            
+            # Create a simple ETH transfer transaction
+            transaction = {
+                'from': self._Web3.to_checksum_address(buyer_address),
+                'to': self._Web3.to_checksum_address(seller_address),
+                'value': amount_wei,
+                'gas': 21000,  # Standard ETH transfer gas
+                'gasPrice': self.w3.eth.gas_price,
+                'nonce': nonce,
+            }
+            
+            signed_txn = self.w3.eth.account.sign_transaction(transaction, private_key)
+            logger.info(f"Submitting payment transfer: {amount_eth} ETH to {seller_address}")
+            return self._submit_transaction(signed_txn, wait_for_receipt=False)
+
+        except Exception as e:
+            logger.error(f"Error transferring payment: {e}")
+            return None
+
     def get_listing_record(self, listing_id: str) -> Optional[Dict[str, Any]]:
         """
         Retrieve the immutable on-chain snapshot of a listing.
