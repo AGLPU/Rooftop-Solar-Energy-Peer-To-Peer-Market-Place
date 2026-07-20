@@ -87,6 +87,9 @@ class ListingService:
             
             if listing.energy_kwh != expected_energy_kwh:
                 # TAMPERING DETECTED!
+                # Only log the first time tampering is detected (when tampered_at is None)
+                is_first_detection = listing.tampered_at is None
+                
                 listing.is_tampered = True
                 listing.tampered_at = datetime.now(timezone.utc)
                 listing.tampered_reason = (
@@ -99,20 +102,22 @@ class ListingService:
                 )
                 db.commit()
                 
-                AuditService.log_event(
-                    db=db,
-                    event_type=AuditEventType.LISTING_TAMPERED,
-                    listing_id=listing.id,
-                    initiated_by=None,
-                    details={
-                        "type": "ENERGY_TAMPERING",
-                        "original_energy_kwh": listing.original_energy_kwh,
-                        "total_purchased_kwh": total_purchased_kwh,
-                        "expected_remaining": expected_energy_kwh,
-                        "actual_in_db": listing.energy_kwh,
-                        "blockchain_stored": listing.original_energy_kwh
-                    }
-                )
+                # Only log audit event on first detection, not on subsequent reads
+                if is_first_detection:
+                    AuditService.log_event(
+                        db=db,
+                        event_type=AuditEventType.LISTING_TAMPERED,
+                        listing_id=listing.id,
+                        initiated_by=None,
+                        details={
+                            "type": "ENERGY_TAMPERING",
+                            "original_energy_kwh": listing.original_energy_kwh,
+                            "total_purchased_kwh": total_purchased_kwh,
+                            "expected_remaining": expected_energy_kwh,
+                            "actual_in_db": listing.energy_kwh,
+                            "blockchain_stored": listing.original_energy_kwh
+                        }
+                    )
                 
                 return False
             

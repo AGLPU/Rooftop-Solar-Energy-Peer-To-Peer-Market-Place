@@ -48,7 +48,7 @@ services:
       - key: DEBUG
         value: "False"
       - key: ALLOWED_ORIGINS
-        value: "*"
+        value: "https://green-energy-marketplace-react.vercel.app"
 
       # ── Blockchain ────────────────────────────────────────────────────────
       - key: BLOCKCHAIN_ENABLED
