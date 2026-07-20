@@ -778,47 +778,48 @@ class BlockchainService:
             """
 
             try:
-                # Web3 v6
-                raw_tx = signed_txn.rawTransaction
-            except AttributeError:
-                # Web3
-                raw_tx = signed_txn.raw_transaction
+                try:
+                    # Web3 v6
+                    raw_tx = signed_txn.rawTransaction
+                except AttributeError:
+                    # Web3
+                    raw_tx = signed_txn.raw_transaction
 
-            logger.info(f"[SUBMIT_TX] Sending raw transaction (length={len(raw_tx)} bytes)")
-            tx_hash = self.w3.eth.send_raw_transaction(raw_tx)
+                logger.info(f"[SUBMIT_TX] Sending raw transaction (length={len(raw_tx)} bytes)")
+                tx_hash = self.w3.eth.send_raw_transaction(raw_tx)
 
-            tx_hash_hex = tx_hash.hex()
-            logger.info(f"[SUBMIT_TX] ✅ Transaction submitted successfully: {tx_hash_hex}")
+                tx_hash_hex = tx_hash.hex()
+                logger.info(f"[SUBMIT_TX] ✅ Transaction submitted successfully: {tx_hash_hex}")
 
-            # If not waiting for receipt, return immediately
-            if not wait_for_receipt:
-                logger.info(f"[SUBMIT_TX] Non-blocking mode: returning tx hash immediately")
-                return tx_hash_hex
-
-            # Otherwise, wait for confirmation (blocking)
-            try:
-                logger.info(f"[SUBMIT_TX] Waiting for receipt (timeout=300s)...")
-                receipt = self.w3.eth.wait_for_transaction_receipt(
-                    tx_hash,
-                    timeout=300
-                )
-
-                if receipt["status"] == 1:
-                    logger.info(f"[SUBMIT_TX] ✅ Transaction mined successfully: {tx_hash_hex}")
+                # If not waiting for receipt, return immediately
+                if not wait_for_receipt:
+                    logger.info(f"[SUBMIT_TX] Non-blocking mode: returning tx hash immediately")
                     return tx_hash_hex
 
-                logger.error(f"[SUBMIT_TX] ❌ Transaction mined but failed: {tx_hash_hex}")
-                return None
+                # Otherwise, wait for confirmation (blocking)
+                try:
+                    logger.info(f"[SUBMIT_TX] Waiting for receipt (timeout=300s)...")
+                    receipt = self.w3.eth.wait_for_transaction_receipt(
+                        tx_hash,
+                        timeout=300
+                    )
 
-            except TimeExhausted:
-                logger.warning(f"[SUBMIT_TX] ⚠️  Receipt timeout, but tx submitted: {tx_hash_hex}")
-                return tx_hash_hex
-        
-        except Exception as e:
-            logger.error(f"[SUBMIT_TX] ❌ Failed to submit transaction: {type(e).__name__}: {e}")
-            import traceback
-            logger.error(f"[SUBMIT_TX] Traceback: {traceback.format_exc()}")
-            return None
+                    if receipt["status"] == 1:
+                        logger.info(f"[SUBMIT_TX] ✅ Transaction mined successfully: {tx_hash_hex}")
+                        return tx_hash_hex
+
+                    logger.error(f"[SUBMIT_TX] ❌ Transaction mined but failed: {tx_hash_hex}")
+                    return None
+
+                except TimeExhausted:
+                    logger.warning(f"[SUBMIT_TX] ⚠️  Receipt timeout, but tx submitted: {tx_hash_hex}")
+                    return tx_hash_hex
+            
+            except Exception as e:
+                logger.error(f"[SUBMIT_TX] ❌ Failed to submit transaction: {type(e).__name__}: {e}")
+                import traceback
+                logger.error(f"[SUBMIT_TX] Traceback: {traceback.format_exc()}")
+                return None
 
 # Singleton instance
 _blockchain_service: Optional[BlockchainService] = None
