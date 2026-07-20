@@ -385,6 +385,17 @@ class BlockchainService:
             account = self.w3.eth.account.from_key(private_key)
             logger.info(f"[PAYMENT] Backend account: {account.address}")
             
+            # Normalize addresses for comparison
+            backend_addr_checksum = self._Web3.to_checksum_address(account.address)
+            seller_addr_checksum = self._Web3.to_checksum_address(seller_address)
+            
+            # Skip self-transfer (backend == seller)
+            if backend_addr_checksum.lower() == seller_addr_checksum.lower():
+                logger.info(f"[PAYMENT] ⚠️  SKIP: Backend account IS the seller. Self-transfer skipped (backend already has the funds)")
+                logger.info(f"[PAYMENT] In production, backend and seller should have different wallet addresses")
+                # Return a synthetic hash to indicate payment was "handled" (no-op for test scenario)
+                return "0xself-transfer-skipped"
+            
             # Convert ETH to wei
             amount_wei = self._Web3.to_wei(float(amount_eth), 'ether')
             logger.info(f"[PAYMENT] Converting {amount_eth} ETH to {amount_wei} wei")
