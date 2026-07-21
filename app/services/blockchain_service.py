@@ -32,8 +32,12 @@ class BlockchainService:
         try:
             self._initialize_connection()
         except Exception as e:
-            logger.warning(f"Blockchain initialization failed: {e}")
+            logger.error(f"❌ Blockchain initialization FAILED: {type(e).__name__}: {e}")
+            import traceback
+            logger.error(f"Traceback:\n{traceback.format_exc()}")
             logger.info("Running in DATABASE-ONLY mode (no blockchain)")
+        
+        logger.info(f"[BLOCKCHAIN_SERVICE] Final state: is_connected={self.is_connected}, has_contract={self.contract is not None}")
 
     def _initialize_connection(self):
         """Initialize Web3 connection and load contract"""
@@ -203,9 +207,14 @@ class BlockchainService:
         Returns:
             Transaction hash or None if blockchain unavailable
         """
+        logger.info(f"[MINT_ENERGY] Starting mint_energy, checking blockchain availability...")
+        logger.info(f"[MINT_ENERGY] is_connected={self.is_connected}, contract={self.contract is not None}")
+        
         if not self.is_available():
-            logger.info("Blockchain unavailable - skipping mint")
+            logger.error(f"[MINT_ENERGY] ❌ BLOCKCHAIN UNAVAILABLE - is_connected={self.is_connected}, contract={self.contract is not None}")
             return None
+
+        logger.info(f"[MINT_ENERGY] ✓ Blockchain available, proceeding with mint")
 
         try:
             private_key = getattr(settings, 'blockchain_private_key', None)
