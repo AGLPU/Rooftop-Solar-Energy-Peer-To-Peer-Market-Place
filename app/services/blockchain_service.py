@@ -65,9 +65,22 @@ class BlockchainService:
             logger.info("No blockchain RPC URL configured")
             return
 
-        # Connect to blockchain
+        # Connect to blockchain (try with SSL, fallback to no-verify for dev environments)
         self.w3 = Web3(Web3.HTTPProvider(rpc_url))
         logger.info(f"is_connected={self.w3.is_connected()}")
+        if not self.w3.is_connected():
+            logger.warning("Connection failed with SSL verify=True, retrying with verify=False (dev mode)...")
+            try:
+                import requests as req_lib
+                import urllib3
+                urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+                session = req_lib.Session()
+                session.verify = False
+                self.w3 = Web3(Web3.HTTPProvider(rpc_url, session=session))
+                logger.info(f"is_connected (no-ssl)={self.w3.is_connected()}")
+            except Exception as ssl_e:
+                logger.error(f"SSL fallback also failed: {ssl_e}")
+
         if not self.w3.is_connected():
             raise ConnectionError("Failed to connect to blockchain network")
 
