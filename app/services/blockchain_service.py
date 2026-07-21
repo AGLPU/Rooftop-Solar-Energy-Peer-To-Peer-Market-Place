@@ -214,6 +214,7 @@ class BlockchainService:
                 return None
 
             account = self.w3.eth.account.from_key(private_key)
+            logger.info(f"[MINT_ENERGY] Backend account: {account.address}")
 
             # Convert price to micro-units (avoid floats in Solidity)
             price_micro = int(Decimal(str(price_per_kwh)) * Decimal("1000000"))
@@ -221,9 +222,19 @@ class BlockchainService:
             # Convert hex hash string to bytes32
             hash_bytes = bytes.fromhex(listing_hash) if listing_hash else bytes(32)
             
-            logger.info(f"[MINT_ENERGY] seller={seller_address}, kwh={energy_kwh}, price_micro={price_micro}, listing_id={listing_id}")
+            logger.info(f"[MINT_ENERGY] Parameters: seller={seller_address}, kwh={energy_kwh}, price_micro={price_micro}, listing_id={listing_id}")
 
-            nonce = self.w3.eth.get_transaction_count(account.address,"pending")
+            # Normalize seller address to checksum format
+            seller_checksum = self._Web3.to_checksum_address(seller_address)
+            logger.info(f"[MINT_ENERGY] Seller checksum: {seller_checksum}")
+
+            # Get nonce
+            try:
+                nonce = self.w3.eth.get_transaction_count(account.address, "pending")
+                logger.info(f"[MINT_ENERGY] Nonce: {nonce}")
+            except Exception as e:
+                logger.error(f"[MINT_ENERGY] ❌ Failed to get nonce: {type(e).__name__}: {e}")
+                raise
             
             # Get gas estimates for EIP-1559 (modern Ethereum/Sepolia)
             try:
@@ -231,34 +242,50 @@ class BlockchainService:
                 base_fee = gas_price_data['baseFeePerGas'][0]
                 max_priority_fee = self.w3.to_wei(1, 'gwei')  # 1 gwei priority for Sepolia
                 max_fee = base_fee + max_priority_fee
-                logger.info(f"[MINT_ENERGY] EIP-1559 fees: baseFee={self.w3.from_wei(base_fee, 'gwei')} gwei, maxFee={self.w3.from_wei(max_fee, 'gwei')} gwei")
+                logger.info(f"[MINT_ENERGY] EIP-1559 fees: baseFee={self.w3.from_wei(base_fee, 'gwei')} gwei, priorityFee={self.w3.from_wei(max_priority_fee, 'gwei')} gwei, maxFee={self.w3.from_wei(max_fee, 'gwei')} gwei")
             except Exception as e:
-                logger.warning(f"[MINT_ENERGY] Could not get EIP-1559 fees, falling back to legacy: {e}")
+                logger.warning(f"[MINT_ENERGY] ⚠️  Could not get EIP-1559 fees: {type(e).__name__}: {e}")
                 max_fee = self.w3.eth.gas_price
                 max_priority_fee = self.w3.eth.gas_price
+                logger.info(f"[MINT_ENERGY] Using legacy gasPrice: {self.w3.from_wei(max_fee, 'gwei')} gwei")
 
-            transaction = self.contract.functions.mintEnergy(
-                self._Web3.to_checksum_address(seller_address),
-                energy_kwh,
-                price_micro,
-                listing_id,
-                hash_bytes
-            ).build_transaction({
-                'from': account.address,
-                'nonce': nonce,
-                'gas': 800000,  # Increased significantly - storing listing record + snapshots + purchase array
-                'maxFeePerGas': max_fee,  # EIP-1559
-                'maxPriorityFeePerGas': max_priority_fee,  # EIP-1559
-            })
+            # Build and sign transaction
+            try:
+                logger.info(f"[MINT_ENERGY] Building transaction...")
+                transaction = self.contract.functions.mintEnergy(
+                    seller_checksum,
+                    energy_kwh,
+                    price_micro,
+                    listing_id,
+                    hash_bytes
+                ).build_transaction({
+                    'from': account.address,
+                    'nonce': nonce,
+                    'gas': 800000,  # Increased significantly - storing listing record + snapshots + purchase array
+                    'maxFeePerGas': max_fee,  # EIP-1559
+                    'maxPriorityFeePerGas': max_priority_fee,  # EIP-1559
+                })
+                logger.info(f"[MINT_ENERGY] ✓ Transaction built successfully")
+            except Exception as e:
+                logger.error(f"[MINT_ENERGY] ❌ Failed to build transaction: {type(e).__name__}: {e}")
+                raise
 
-            signed_txn = self.w3.eth.account.sign_transaction(transaction, private_key)
-            logger.info(f"[MINT_ENERGY] ✓ Transaction signed, submitting for listing {listing_id}")
+            try:
+                signed_txn = self.w3.eth.account.sign_transaction(transaction, private_key)
+                logger.info(f"[MINT_ENERGY] ✓ Transaction signed successfully")
+            except Exception as e:
+                logger.error(f"[MINT_ENERGY] ❌ Failed to sign transaction: {type(e).__name__}: {e}")
+                raise
+
+            logger.info(f"[MINT_ENERGY] 📤 Submitting transaction for listing {listing_id}...")
             tx_hash = self._submit_transaction(signed_txn, wait_for_receipt=False)
-            logger.info(f"[MINT_ENERGY] Result: tx_hash={tx_hash}")
+            logger.info(f"[MINT_ENERGY] ✓ Result: tx_hash={tx_hash}")
             return tx_hash
 
         except Exception as e:
-            logger.error(f"Error minting energy: {e}")
+            logger.error(f"[MINT_ENERGY] ❌ FATAL ERROR: {type(e).__name__}: {e}")
+            import traceback
+            logger.error(f"[MINT_ENERGY] Traceback:\n{traceback.format_exc()}")
             return None
 
     def mint_energy_with_snapshot(
