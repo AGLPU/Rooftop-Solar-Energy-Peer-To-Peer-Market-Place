@@ -240,14 +240,15 @@ class BlockchainService:
             try:
                 gas_price_data = self.w3.eth.fee_history(1, 'latest')
                 base_fee = gas_price_data['baseFeePerGas'][0]
-                max_priority_fee = self.w3.to_wei(1, 'gwei')  # 1 gwei priority for Sepolia
+                max_priority_fee = self.w3.to_wei(5, 'gwei')  # 5 gwei priority for Sepolia (1 gwei was too low)
                 max_fee = base_fee + max_priority_fee
                 logger.info(f"[MINT_ENERGY] EIP-1559 fees: baseFee={self.w3.from_wei(base_fee, 'gwei')} gwei, priorityFee={self.w3.from_wei(max_priority_fee, 'gwei')} gwei, maxFee={self.w3.from_wei(max_fee, 'gwei')} gwei")
             except Exception as e:
                 logger.warning(f"[MINT_ENERGY] ⚠️  Could not get EIP-1559 fees: {type(e).__name__}: {e}")
-                max_fee = self.w3.eth.gas_price
-                max_priority_fee = self.w3.eth.gas_price
-                logger.info(f"[MINT_ENERGY] Using legacy gasPrice: {self.w3.from_wei(max_fee, 'gwei')} gwei")
+                # Use higher fallback fees for Sepolia (was too low before)
+                max_fee = self.w3.to_wei(10, 'gwei')
+                max_priority_fee = self.w3.to_wei(5, 'gwei')
+                logger.info(f"[MINT_ENERGY] Using fallback fees: maxFee={self.w3.from_wei(max_fee, 'gwei')} gwei, priorityFee={self.w3.from_wei(max_priority_fee, 'gwei')} gwei")
 
             # Build and sign transaction
             try:
@@ -365,13 +366,14 @@ class BlockchainService:
             try:
                 gas_price_data = self.w3.eth.fee_history(1, 'latest')
                 base_fee = gas_price_data['baseFeePerGas'][0]
-                max_priority_fee = self.w3.to_wei(1, 'gwei')
+                max_priority_fee = self.w3.to_wei(5, 'gwei')  # 5 gwei for Sepolia (was 1 gwei, too low)
                 max_fee = base_fee + max_priority_fee
                 logger.info(f"[RECORD_PURCHASE] EIP-1559 fees: maxFee={self.w3.from_wei(max_fee, 'gwei')} gwei")
             except Exception as e:
                 logger.warning(f"[RECORD_PURCHASE] Could not get EIP-1559 fees: {e}")
-                max_fee = self.w3.eth.gas_price
-                max_priority_fee = self.w3.eth.gas_price
+                # Use higher fallback fees
+                max_fee = self.w3.to_wei(10, 'gwei')
+                max_priority_fee = self.w3.to_wei(5, 'gwei')
 
             # Call smart contract with purchase hash for integrity verification
             transaction = self.contract.functions.recordPurchase(
@@ -465,15 +467,15 @@ class BlockchainService:
             try:
                 gas_price_data = self.w3.eth.fee_history(1, 'latest')
                 base_fee = gas_price_data['baseFeePerGas'][0]
-                max_priority_fee = self.w3.to_wei(1, 'gwei')  # 1 gwei priority for Sepolia
+                max_priority_fee = self.w3.to_wei(5, 'gwei')  # 5 gwei priority for Sepolia (was 1 gwei, too low)
                 max_fee = base_fee + max_priority_fee
                 logger.info(f"[PAYMENT] EIP-1559 fees: baseFee={self.w3.from_wei(base_fee, 'gwei')} gwei, priorityFee={self.w3.from_wei(max_priority_fee, 'gwei')} gwei, maxFee={self.w3.from_wei(max_fee, 'gwei')} gwei")
             except Exception as e:
-                logger.warning(f"[PAYMENT] ⚠️  Could not get EIP-1559 fees, falling back to legacy gasPrice: {e}")
-                # Fallback for networks that don't support EIP-1559
-                max_fee = self.w3.eth.gas_price
-                max_priority_fee = self.w3.eth.gas_price
-                logger.info(f"[PAYMENT] Using legacy gasPrice: {self.w3.from_wei(max_fee, 'gwei')} gwei")
+                logger.warning(f"[PAYMENT] ⚠️  Could not get EIP-1559 fees, falling back to higher fees: {e}")
+                # Fallback: use higher fees for Sepolia
+                max_fee = self.w3.to_wei(10, 'gwei')
+                max_priority_fee = self.w3.to_wei(5, 'gwei')
+                logger.info(f"[PAYMENT] Using fallback fees: maxFee={self.w3.from_wei(max_fee, 'gwei')} gwei, priorityFee={self.w3.from_wei(max_priority_fee, 'gwei')} gwei")
             
             # Create ETH transfer transaction FROM backend TO seller
             # Backend facilitates the payment on behalf of the buyer
@@ -596,13 +598,14 @@ class BlockchainService:
             try:
                 gas_price_data = self.w3.eth.fee_history(1, 'latest')
                 base_fee = gas_price_data['baseFeePerGas'][0]
-                max_priority_fee = self.w3.to_wei(1, 'gwei')
+                max_priority_fee = self.w3.to_wei(5, 'gwei')  # 5 gwei for Sepolia (was 1 gwei, too low)
                 max_fee = base_fee + max_priority_fee
                 logger.info(f"[CONSUME_ENERGY] EIP-1559 fees: maxFee={self.w3.from_wei(max_fee, 'gwei')} gwei")
             except Exception as e:
                 logger.warning(f"[CONSUME_ENERGY] Could not get EIP-1559 fees: {e}")
-                max_fee = self.w3.eth.gas_price
-                max_priority_fee = self.w3.eth.gas_price
+                # Use higher fallback fees
+                max_fee = self.w3.to_wei(10, 'gwei')
+                max_priority_fee = self.w3.to_wei(5, 'gwei')
 
             transaction = self.contract.functions.consumeEnergyFor(
                 self._Web3.to_checksum_address(buyer_address),
