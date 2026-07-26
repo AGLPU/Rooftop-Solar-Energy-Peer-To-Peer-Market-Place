@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Integer, Numeric, DateTime, ForeignKey, Enum as SQLEnum, Boolean
+from sqlalchemy import Column, String, Integer, Numeric, DateTime, ForeignKey, Enum as SQLEnum, Boolean, UniqueConstraint
 from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.postgresql import UUID
 from datetime import datetime
@@ -36,7 +36,12 @@ class Listing(Base):
     Represents solar energy available for sale
     """
     __tablename__ = "listings"
-    __table_args__ = {"schema": settings.database_schema}
+    __table_args__ = (
+        # Prevent a seller from registering the same certified reading (source + timestamp) twice.
+        # The same meter can produce multiple readings over time — each is a unique listing.
+        UniqueConstraint("seller_id", "source_id", "source_timestamp", name="uq_listings_seller_source_ts"),
+        {"schema": settings.database_schema},
+    )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
 
@@ -63,6 +68,10 @@ class Listing(Base):
 
     # Blockchain
     blockchain_tx_hash = Column(String(66), nullable=True)  # Ethereum tx hash (0x + 64 chars)
+
+    # Verified energy source — proves the energy came from a certified meter/IoT device
+    source_id = Column(String(100), nullable=True)         # Certified reading ID e.g. "METER-001-READ-20260726"
+    source_timestamp = Column(DateTime, nullable=True)     # When the certified reading was taken
 
     # Verification (visibility to buyers)
     verified = Column(Boolean, default=False, nullable=False)  # Is listing verified on blockchain?

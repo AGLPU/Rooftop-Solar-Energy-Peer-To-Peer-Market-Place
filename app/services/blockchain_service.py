@@ -157,6 +157,9 @@ class BlockchainService:
             "location":      listing.location or "",
             "expires_at":    listing.expires_at.isoformat() if listing.expires_at else "",
             "created_at":    listing.created_at.isoformat() if listing.created_at else "",
+            # Verified source fields — anchored in hash
+            "source_id":        listing.source_id or "",
+            "source_timestamp": listing.source_timestamp.isoformat() if listing.source_timestamp else "",
         }
         # Sort keys for deterministic ordering
         canonical = json.dumps(data, sort_keys=True, separators=(',', ':'))
@@ -205,7 +208,9 @@ class BlockchainService:
         energy_kwh: int,
         price_per_kwh: Decimal,
         listing_id: str = "",
-        listing_hash: str = ""
+        listing_hash: str = "",
+        source_id: str = "",
+        source_timestamp: int = 0
     ) -> Optional[str]:
         """
         Mint energy tokens for a seller
@@ -216,6 +221,8 @@ class BlockchainService:
             price_per_kwh: Price per kWh (stored on-chain as micro-units * 1e6)
             listing_id: DB listing UUID — stored on-chain for tamper detection
             listing_hash: SHA256 of ALL listing fields — covers every DB field
+            source_id: Certified meter/IoT reading ID — proves energy came from a verified source
+            source_timestamp: Unix timestamp of the certified energy production reading
 
         Returns:
             Transaction hash or None if blockchain unavailable
@@ -280,7 +287,9 @@ class BlockchainService:
                     energy_kwh,
                     price_micro,
                     listing_id,
-                    hash_bytes
+                    hash_bytes,
+                    source_id,
+                    source_timestamp
                 ).build_transaction({
                     'from': account.address,
                     'nonce': nonce,
@@ -795,6 +804,9 @@ class BlockchainService:
             "location": listing.location or "",
             "expires_at": listing.expires_at.isoformat() if listing.expires_at else "",
             "created_at": listing.created_at.isoformat() if listing.created_at else "",
+            # Verified source fields — anchored in hash so they can't be swapped after minting
+            "source_id": listing.source_id or "",
+            "source_timestamp": listing.source_timestamp.isoformat() if listing.source_timestamp else "",
         }
         
         data_str = json.dumps(data, sort_keys=True)

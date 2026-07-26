@@ -181,6 +181,25 @@ class ListingService:
                 detail=f"Seller '{seller.username}' must have a wallet address to create listings"
             )
 
+        # ── Duplicate source check (DB layer) ───────────────────────────────
+        # A seller can list the same source multiple times (different readings),
+        # but not the same source + timestamp (same reading) twice.
+        existing = db.query(Listing).filter(
+            Listing.seller_id == seller.id,
+            Listing.source_id == payload.source_id,
+            Listing.source_timestamp == payload.source_timestamp
+        ).first()
+        if existing:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    f"Energy reading '{payload.source_id}' at "
+                    f"'{payload.source_timestamp.isoformat()}' has already been listed "
+                    f"(listing ID: {existing.id}). "
+                    "The same meter reading cannot be listed twice."
+                )
+            )
+
         # Create listing
         # Auto-generate title if not provided: "EC-{energy_kwh}-{first_block_of_seller_uuid}"
         title = payload.title
@@ -198,7 +217,9 @@ class ListingService:
             description=payload.description,
             location=payload.location,
             expires_at=payload.expires_at,
-            status=ListingStatus.ACTIVE
+            status=ListingStatus.ACTIVE,
+            source_id=payload.source_id,
+            source_timestamp=payload.source_timestamp,
         )
 
         db.add(listing)
@@ -228,7 +249,9 @@ class ListingService:
             energy_kwh=listing.energy_kwh,
             price_per_kwh=listing.price_per_kwh,
             listing_id=str(listing.id),
-            listing_hash=listing_hash
+            listing_hash=listing_hash,
+            source_id=listing.source_id,
+            source_timestamp=int(listing.source_timestamp.timestamp()) if listing.source_timestamp else 0,
         )
         
         # ── Enforce: Blockchain mint is REQUIRED ─────────────────────────────

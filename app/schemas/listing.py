@@ -16,6 +16,9 @@ class ListingCreateRequest(BaseModel):
     location: Optional[str] = Field(None, max_length=200, description="Energy production location")
     expires_at: Optional[datetime] = Field(None, description="When listing expires")
     seller_id: Optional[UUID] = Field(None, description="[Admin only] Target seller's user ID")
+    # Verified energy source — proves energy is real and certified
+    source_id: str = Field(..., min_length=3, max_length=100, description="Certified meter/IoT reading ID (e.g. METER-001-READ-20260726). Unique per seller — prevents re-listing the same energy.")
+    source_timestamp: datetime = Field(..., description="Timestamp when the certified energy reading was taken")
 
 
 class ListingUpdateRequest(BaseModel):
@@ -44,6 +47,9 @@ class ListingResponse(BaseModel):
     is_tampered: bool
     tampered_at: Optional[datetime]
     tampered_reason: Optional[str]
+    # Verified source
+    source_id: Optional[str]
+    source_timestamp: Optional[datetime]
     created_at: datetime
     updated_at: datetime
     expires_at: Optional[datetime]
@@ -79,6 +85,9 @@ class ListingWithSellerResponse(BaseModel):
     is_tampered: bool
     tampered_at: Optional[datetime]
     tampered_reason: Optional[str]
+    # Verified source
+    source_id: Optional[str]
+    source_timestamp: Optional[datetime]
     created_at: datetime
     updated_at: datetime
     expires_at: Optional[datetime]
