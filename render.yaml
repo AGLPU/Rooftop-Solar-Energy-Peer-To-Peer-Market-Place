@@ -3,7 +3,7 @@ services:
     name: rooftop-solar-marketplace
     runtime: python
     buildCommand: pip install -r requirements.txt
-    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    startCommand: alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port $PORT
     envVars:
       # ── Option 1: Railway/Render managed PostgreSQL ──────────────────────
       # Railway auto-injects DATABASE_URL. On Render, add a Postgres add-on
