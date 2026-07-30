@@ -181,19 +181,27 @@ class ListingService:
                 detail=f"Seller '{seller.username}' must have a wallet address to create listings"
             )
 
+        # ── Generate source_id on the backend ──────────────────────────────
+        # Format: {UserIdPrefix}-{EnergySourceCode}
+        # UserIdPrefix = first 8 hex chars of seller UUID (uppercase)
+        # EnergySourceCode = energy_source enum value (e.g. SOLAR, WIND)
+        # Example: "A1B2C3D4-SOLAR"
+        user_id_prefix = str(seller.id).split('-')[0].upper()
+        generated_source_id = f"{user_id_prefix}-{payload.energy_source.value}"
+
         # ── Duplicate source check (DB layer) ───────────────────────────────
         # A seller can list the same source multiple times (different readings),
         # but not the same source + timestamp (same reading) twice.
         existing = db.query(Listing).filter(
             Listing.seller_id == seller.id,
-            Listing.source_id == payload.source_id,
+            Listing.source_id == generated_source_id,
             Listing.source_timestamp == payload.source_timestamp
         ).first()
         if existing:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail=(
-                    f"Energy reading '{payload.source_id}' at "
+                    f"Energy reading '{generated_source_id}' at "
                     f"'{payload.source_timestamp.isoformat()}' has already been listed "
                     f"(listing ID: {existing.id}). "
                     "The same meter reading cannot be listed twice."
@@ -218,7 +226,7 @@ class ListingService:
             location=payload.location,
             expires_at=payload.expires_at,
             status=ListingStatus.ACTIVE,
-            source_id=payload.source_id,
+            source_id=generated_source_id,
             source_timestamp=payload.source_timestamp,
         )
 
