@@ -19,6 +19,16 @@ logger = logging.getLogger(__name__)
 class ListingService:
     """Service for energy listing operations"""
 
+    def _expire_if_due(self, db: Session, listing: Listing) -> None:
+        """Mark an ACTIVE listing as EXPIRED if its expires_at has passed."""
+        if (
+            listing.status == ListingStatus.ACTIVE
+            and listing.expires_at is not None
+            and listing.expires_at < datetime.now(timezone.utc).replace(tzinfo=None)
+        ):
+            listing.status = ListingStatus.EXPIRED
+            db.commit()
+
     def _check_listing_integrity(self, db: Session, listing: Listing) -> bool:
         """
         Verify listing integrity using BLOCKCHAIN RECORDS as source of truth.
@@ -209,11 +219,10 @@ class ListingService:
             )
 
         # Create listing
-        # Auto-generate title if not provided: "EC-{energy_kwh}-{first_block_of_seller_uuid}"
+        # Auto-generate title if not provided: "EC-{energy_kwh}-{source_id}"
         title = payload.title
         if not title:
-            seller_uuid_block = str(seller.id).split('-')[0]  # Get first block of UUID (first 8 chars)
-            title = f"EC-{payload.energy_kwh}-{seller_uuid_block}"
+            title = f"EC-{payload.energy_kwh}-{generated_source_id}"
         
         listing = Listing(
             seller_id=seller.id,
@@ -258,7 +267,6 @@ class ListingService:
             price_per_kwh=listing.price_per_kwh,
             listing_id=str(listing.id),
             listing_hash=listing_hash,
-            source_id=listing.source_id,
             source_timestamp=int(listing.source_timestamp.timestamp()) if listing.source_timestamp else 0,
         )
         
@@ -341,9 +349,10 @@ class ListingService:
         query = query.order_by(Listing.created_at.desc())
         listings = query.offset(skip).limit(limit).all()
 
-        # Real-time integrity check for each listing
+        # Real-time expiry + integrity check for each listing
         filtered_listings = []
         for listing in listings:
+            self._expire_if_due(db, listing)
             self._check_listing_integrity(db, listing)
             
             # After integrity check, apply visibility filter
