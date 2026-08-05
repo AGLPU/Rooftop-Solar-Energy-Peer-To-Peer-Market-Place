@@ -267,6 +267,7 @@ class ListingService:
             price_per_kwh=listing.price_per_kwh,
             listing_id=str(listing.id),
             listing_hash=listing_hash,
+            source_id=listing.source_id or generated_source_id,
             source_timestamp=int(listing.source_timestamp.timestamp()) if listing.source_timestamp else 0,
         )
         
