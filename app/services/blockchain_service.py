@@ -6,10 +6,11 @@ ABI file path (generated after 'npm run compile' in solar-blockchain/):
   ../solar-blockchain/artifacts/contracts/EnergyToken.sol/EnergyToken.json
 """
 from decimal import Decimal
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 import hashlib
 import json
 import logging
+import threading
 from web3.exceptions import TimeExhausted
 from pathlib import Path
 
@@ -28,6 +29,8 @@ class BlockchainService:
         self.contract = None
         self.contract_address: Optional[str] = None
         self.is_connected = False
+        # Serialize all transaction submissions so nonces never collide
+        self._nonce_lock = threading.Lock()
 
         try:
             self._initialize_connection()
@@ -130,6 +133,116 @@ class BlockchainService:
     def is_available(self) -> bool:
         """Check if blockchain service is available"""
         return self.is_connected and self.contract is not None
+
+    def get_account(self) -> Optional[str]:
+        """Return the platform wallet address (derived from private key)."""
+        if not self.is_available():
+            return None
+        private_key = getattr(settings, 'blockchain_private_key', None)
+        if not private_key:
+            return None
+        return self.w3.eth.account.from_key(private_key).address
+
+    # ─── Nonce diagnostics & queue management ────────────────────────────────
+
+    def get_nonce_status(self) -> Dict[str, Any]:
+        """
+        Return confirmed vs pending nonce for the platform wallet.
+        pending - confirmed = number of transactions stuck in the mempool.
+        """
+        if not self.is_available():
+            return {"error": "Blockchain unavailable"}
+        account_address = self.get_account()
+        if not account_address:
+            return {"error": "No private key configured"}
+        confirmed = self.w3.eth.get_transaction_count(account_address, "latest")
+        pending   = self.w3.eth.get_transaction_count(account_address, "pending")
+        return {
+            "account":          account_address,
+            "confirmed_nonce":  confirmed,
+            "pending_nonce":    pending,
+            "stuck_tx_count":   pending - confirmed,
+            "note": (
+                "stuck_tx_count > 0 means transactions are waiting in the mempool. "
+                "Call POST /blockchain/admin/flush-nonce-queue to cancel them."
+            )
+        }
+
+    def flush_nonce_queue(self, gas_multiplier: float = 3.0) -> Dict[str, Any]:
+        """
+        Cancel every stuck pending transaction by resending a zero-value
+        self-transfer at the SAME nonce with a much higher gas price
+        (EIP-1559: raises maxFeePerGas by gas_multiplier × current base fee).
+
+        Returns a summary of what was cancelled.
+        """
+        if not self.is_available():
+            return {"error": "Blockchain unavailable"}
+
+        private_key = getattr(settings, 'blockchain_private_key', None)
+        if not private_key:
+            return {"error": "No private key configured"}
+
+        account = self.w3.eth.account.from_key(private_key)
+        confirmed = self.w3.eth.get_transaction_count(account.address, "latest")
+        pending   = self.w3.eth.get_transaction_count(account.address, "pending")
+        stuck_count = pending - confirmed
+
+        if stuck_count <= 0:
+            return {
+                "status":      "ok",
+                "message":     "No stuck transactions found.",
+                "confirmed_nonce": confirmed,
+                "pending_nonce":   pending,
+            }
+
+        logger.warning(f"[FLUSH_NONCE] Flushing {stuck_count} stuck tx(s) "
+                       f"(nonces {confirmed} – {pending - 1})")
+
+        # Fetch current network fees
+        try:
+            fee_data  = self.w3.eth.fee_history(1, 'latest')
+            base_fee  = fee_data['baseFeePerGas'][0]
+        except Exception:
+            base_fee  = self.w3.to_wei(10, 'gwei')
+
+        priority_fee = self.w3.to_wei(10, 'gwei')                  # 10 gwei priority
+        max_fee      = int(base_fee * gas_multiplier) + priority_fee  # very aggressive
+
+        cancelled = []
+        errors    = []
+
+        with self._nonce_lock:
+            for nonce in range(confirmed, pending):
+                try:
+                    cancel_tx = {
+                        'from':                 account.address,
+                        'to':                   account.address,   # self-transfer
+                        'value':                0,
+                        'gas':                  21000,
+                        'maxFeePerGas':         max_fee,
+                        'maxPriorityFeePerGas': priority_fee,
+                        'nonce':                nonce,
+                        'chainId':              self.w3.eth.chain_id,
+                    }
+                    signed  = self.w3.eth.account.sign_transaction(cancel_tx, private_key)
+                    tx_hash = self._submit_transaction(signed, wait_for_receipt=False)
+                    logger.info(f"[FLUSH_NONCE] Cancellation tx for nonce {nonce}: {tx_hash}")
+                    cancelled.append({"nonce": nonce, "cancel_tx_hash": tx_hash})
+                except Exception as e:
+                    logger.error(f"[FLUSH_NONCE] Failed to cancel nonce {nonce}: {e}")
+                    errors.append({"nonce": nonce, "error": str(e)})
+
+        return {
+            "status":          "flushed",
+            "stuck_tx_count":  stuck_count,
+            "cancelled":       cancelled,
+            "errors":          errors,
+            "message": (
+                f"Sent {len(cancelled)} cancellation transaction(s) with higher gas. "
+                "They will replace the stuck ones once mined on Sepolia."
+            ),
+        }
 
     @staticmethod
     def compute_listing_hash(listing) -> str:
@@ -257,62 +370,62 @@ class BlockchainService:
             seller_checksum = self._Web3.to_checksum_address(seller_address)
             logger.info(f"[MINT_ENERGY] Seller checksum: {seller_checksum}")
 
-            # Get nonce
-            try:
-                nonce = self.w3.eth.get_transaction_count(account.address, "pending")
-                logger.info(f"[MINT_ENERGY] Nonce: {nonce}")
-            except Exception as e:
-                logger.error(f"[MINT_ENERGY] ❌ Failed to get nonce: {type(e).__name__}: {e}")
-                raise
-            
-            # Get gas estimates for EIP-1559 (modern Ethereum/Sepolia)
-            try:
-                gas_price_data = self.w3.eth.fee_history(1, 'latest')
-                base_fee = gas_price_data['baseFeePerGas'][0]
-                max_priority_fee = self.w3.to_wei(5, 'gwei')  # 5 gwei priority for Sepolia (1 gwei was too low)
-                max_fee = base_fee + max_priority_fee
-                logger.info(f"[MINT_ENERGY] EIP-1559 fees: baseFee={self.w3.from_wei(base_fee, 'gwei')} gwei, priorityFee={self.w3.from_wei(max_priority_fee, 'gwei')} gwei, maxFee={self.w3.from_wei(max_fee, 'gwei')} gwei")
-            except Exception as e:
-                logger.warning(f"[MINT_ENERGY] ⚠️  Could not get EIP-1559 fees: {type(e).__name__}: {e}")
-                # Use higher fallback fees for Sepolia (was too low before)
-                max_fee = self.w3.to_wei(10, 'gwei')
-                max_priority_fee = self.w3.to_wei(5, 'gwei')
-                logger.info(f"[MINT_ENERGY] Using fallback fees: maxFee={self.w3.from_wei(max_fee, 'gwei')} gwei, priorityFee={self.w3.from_wei(max_priority_fee, 'gwei')} gwei")
+            with self._nonce_lock:
+                # Get nonce inside the lock so concurrent calls don't collide
+                try:
+                    nonce = self.w3.eth.get_transaction_count(account.address, "pending")
+                    logger.info(f"[MINT_ENERGY] Nonce: {nonce}")
+                except Exception as e:
+                    logger.error(f"[MINT_ENERGY] ❌ Failed to get nonce: {type(e).__name__}: {e}")
+                    raise
 
-            # Build and sign transaction
-            try:
-                logger.info(f"[MINT_ENERGY] Building transaction...")
-                transaction = self.contract.functions.mintEnergy(
-                    seller_checksum,
-                    energy_kwh,
-                    price_micro,
-                    listing_id,
-                    hash_bytes,
-                    source_id,
-                    source_timestamp
-                ).build_transaction({
-                    'from': account.address,
-                    'nonce': nonce,
-                    'gas': 800000,  # Increased significantly - storing listing record + snapshots + purchase array
-                    'maxFeePerGas': max_fee,  # EIP-1559
-                    'maxPriorityFeePerGas': max_priority_fee,  # EIP-1559
-                })
-                logger.info(f"[MINT_ENERGY] ✓ Transaction built successfully")
-            except Exception as e:
-                logger.error(f"[MINT_ENERGY] ❌ Failed to build transaction: {type(e).__name__}: {e}")
-                raise
+                # Get gas estimates for EIP-1559 (modern Ethereum/Sepolia)
+                try:
+                    gas_price_data = self.w3.eth.fee_history(1, 'latest')
+                    base_fee = gas_price_data['baseFeePerGas'][0]
+                    max_priority_fee = self.w3.to_wei(5, 'gwei')
+                    max_fee = base_fee * 2 + max_priority_fee  # 2× base fee buffer
+                    logger.info(f"[MINT_ENERGY] EIP-1559 fees: baseFee={self.w3.from_wei(base_fee, 'gwei')} gwei, priorityFee={self.w3.from_wei(max_priority_fee, 'gwei')} gwei, maxFee={self.w3.from_wei(max_fee, 'gwei')} gwei")
+                except Exception as e:
+                    logger.warning(f"[MINT_ENERGY] ⚠️  Could not get EIP-1559 fees: {type(e).__name__}: {e}")
+                    max_fee = self.w3.to_wei(20, 'gwei')
+                    max_priority_fee = self.w3.to_wei(5, 'gwei')
+                    logger.info(f"[MINT_ENERGY] Using fallback fees: maxFee={self.w3.from_wei(max_fee, 'gwei')} gwei")
 
-            try:
-                signed_txn = self.w3.eth.account.sign_transaction(transaction, private_key)
-                logger.info(f"[MINT_ENERGY] ✓ Transaction signed successfully")
-            except Exception as e:
-                logger.error(f"[MINT_ENERGY] ❌ Failed to sign transaction: {type(e).__name__}: {e}")
-                raise
+                # Build and sign transaction
+                try:
+                    logger.info(f"[MINT_ENERGY] Building transaction...")
+                    transaction = self.contract.functions.mintEnergy(
+                        seller_checksum,
+                        energy_kwh,
+                        price_micro,
+                        listing_id,
+                        hash_bytes,
+                        source_id,
+                        source_timestamp
+                    ).build_transaction({
+                        'from': account.address,
+                        'nonce': nonce,
+                        'gas': 800000,
+                        'maxFeePerGas': max_fee,
+                        'maxPriorityFeePerGas': max_priority_fee,
+                    })
+                    logger.info(f"[MINT_ENERGY] ✓ Transaction built successfully")
+                except Exception as e:
+                    logger.error(f"[MINT_ENERGY] ❌ Failed to build transaction: {type(e).__name__}: {e}")
+                    raise
 
-            logger.info(f"[MINT_ENERGY] 📤 Submitting transaction for listing {listing_id}...")
-            tx_hash = self._submit_transaction(signed_txn, wait_for_receipt=False)
-            logger.info(f"[MINT_ENERGY] ✓ Result: tx_hash={tx_hash}")
-            return tx_hash
+                try:
+                    signed_txn = self.w3.eth.account.sign_transaction(transaction, private_key)
+                    logger.info(f"[MINT_ENERGY] ✓ Transaction signed successfully")
+                except Exception as e:
+                    logger.error(f"[MINT_ENERGY] ❌ Failed to sign transaction: {type(e).__name__}: {e}")
+                    raise
+
+                logger.info(f"[MINT_ENERGY] 📤 Submitting transaction for listing {listing_id}...")
+                tx_hash = self._submit_transaction(signed_txn, wait_for_receipt=False)
+                logger.info(f"[MINT_ENERGY] ✓ Result: tx_hash={tx_hash}")
+                return tx_hash
 
         except Exception as e:
             logger.error(f"[MINT_ENERGY] ❌ FATAL ERROR: {type(e).__name__}: {e}")
@@ -385,46 +498,47 @@ class BlockchainService:
                 return None
 
             account = self.w3.eth.account.from_key(private_key)
-            nonce = self.w3.eth.get_transaction_count(account.address,"pending")
 
             # Convert price to wei
             price_wei = self._Web3.to_wei(float(price_eth), 'ether')
 
             # Convert purchase_hash hex string to bytes32
             purchase_hash_bytes = bytes.fromhex(purchase_hash) if purchase_hash else bytes(32)
-            
-            # Get gas estimates for EIP-1559
-            try:
-                gas_price_data = self.w3.eth.fee_history(1, 'latest')
-                base_fee = gas_price_data['baseFeePerGas'][0]
-                max_priority_fee = self.w3.to_wei(5, 'gwei')  # 5 gwei for Sepolia (was 1 gwei, too low)
-                max_fee = base_fee + max_priority_fee
-                logger.info(f"[RECORD_PURCHASE] EIP-1559 fees: maxFee={self.w3.from_wei(max_fee, 'gwei')} gwei")
-            except Exception as e:
-                logger.warning(f"[RECORD_PURCHASE] Could not get EIP-1559 fees: {e}")
-                # Use higher fallback fees
-                max_fee = self.w3.to_wei(10, 'gwei')
-                max_priority_fee = self.w3.to_wei(5, 'gwei')
 
-            # Call smart contract with purchase hash for integrity verification
-            transaction = self.contract.functions.recordPurchase(
-                self._Web3.to_checksum_address(seller_address),
-                self._Web3.to_checksum_address(buyer_address),
-                energy_kwh,
-                price_wei,
-                listing_id,
-                purchase_hash_bytes  # ← NEW: Purchase data integrity hash
-            ).build_transaction({
-                'from': account.address,
-                'nonce': nonce,
-                'gas': 500000,  # Increased significantly - adding purchase to array
-                'maxFeePerGas': max_fee,  # EIP-1559
-                'maxPriorityFeePerGas': max_priority_fee,  # EIP-1559
-            })
+            with self._nonce_lock:
+                nonce = self.w3.eth.get_transaction_count(account.address, "pending")
 
-            signed_txn = self.w3.eth.account.sign_transaction(transaction, private_key)
-            logger.info(f"[RECORD_PURCHASE] ✓ Submitting purchase record transaction")
-            return self._submit_transaction(signed_txn, wait_for_receipt=False)
+                # Get gas estimates for EIP-1559
+                try:
+                    gas_price_data = self.w3.eth.fee_history(1, 'latest')
+                    base_fee = gas_price_data['baseFeePerGas'][0]
+                    max_priority_fee = self.w3.to_wei(5, 'gwei')
+                    max_fee = base_fee * 2 + max_priority_fee
+                    logger.info(f"[RECORD_PURCHASE] EIP-1559 fees: maxFee={self.w3.from_wei(max_fee, 'gwei')} gwei")
+                except Exception as e:
+                    logger.warning(f"[RECORD_PURCHASE] Could not get EIP-1559 fees: {e}")
+                    max_fee = self.w3.to_wei(20, 'gwei')
+                    max_priority_fee = self.w3.to_wei(5, 'gwei')
+
+                # Call smart contract with purchase hash for integrity verification
+                transaction = self.contract.functions.recordPurchase(
+                    self._Web3.to_checksum_address(seller_address),
+                    self._Web3.to_checksum_address(buyer_address),
+                    energy_kwh,
+                    price_wei,
+                    listing_id,
+                    purchase_hash_bytes
+                ).build_transaction({
+                    'from': account.address,
+                    'nonce': nonce,
+                    'gas': 500000,
+                    'maxFeePerGas': max_fee,
+                    'maxPriorityFeePerGas': max_priority_fee,
+                })
+
+                signed_txn = self.w3.eth.account.sign_transaction(transaction, private_key)
+                logger.info(f"[RECORD_PURCHASE] ✓ Submitting purchase record transaction")
+                return self._submit_transaction(signed_txn, wait_for_receipt=False)
 
         except Exception as e:
             logger.error(f"Error recording purchase: {e}")
@@ -490,44 +604,42 @@ class BlockchainService:
                 logger.error(f"[PAYMENT] ❌ INSUFFICIENT BALANCE: {balance_eth} ETH < {amount_eth} ETH needed")
                 return None
             logger.info(f"[PAYMENT] ✓ Balance sufficient")
-            
-            nonce = self.w3.eth.get_transaction_count(account.address, "pending")
-            logger.info(f"[PAYMENT] Nonce: {nonce}")
-            
-            # Get gas estimates for EIP-1559 (modern Ethereum/Sepolia)
-            try:
-                gas_price_data = self.w3.eth.fee_history(1, 'latest')
-                base_fee = gas_price_data['baseFeePerGas'][0]
-                max_priority_fee = self.w3.to_wei(5, 'gwei')  # 5 gwei priority for Sepolia (was 1 gwei, too low)
-                max_fee = base_fee + max_priority_fee
-                logger.info(f"[PAYMENT] EIP-1559 fees: baseFee={self.w3.from_wei(base_fee, 'gwei')} gwei, priorityFee={self.w3.from_wei(max_priority_fee, 'gwei')} gwei, maxFee={self.w3.from_wei(max_fee, 'gwei')} gwei")
-            except Exception as e:
-                logger.warning(f"[PAYMENT] ⚠️  Could not get EIP-1559 fees, falling back to higher fees: {e}")
-                # Fallback: use higher fees for Sepolia
-                max_fee = self.w3.to_wei(10, 'gwei')
-                max_priority_fee = self.w3.to_wei(5, 'gwei')
-                logger.info(f"[PAYMENT] Using fallback fees: maxFee={self.w3.from_wei(max_fee, 'gwei')} gwei, priorityFee={self.w3.from_wei(max_priority_fee, 'gwei')} gwei")
-            
-            # Create ETH transfer transaction FROM backend TO seller
-            # Backend facilitates the payment on behalf of the buyer
-            transaction = {
-                'from': account.address,  # ← Backend account (has private key)
-                'to': self._Web3.to_checksum_address(seller_address),
-                'value': amount_wei,
-                'gas': 21000,  # Standard ETH transfer gas
-                'maxFeePerGas': max_fee,  # EIP-1559: max fee per gas
-                'maxPriorityFeePerGas': max_priority_fee,  # EIP-1559: priority fee
-                'nonce': nonce,
-            }
-            logger.info(f"[PAYMENT] Transaction object created: from={transaction['from']}, to={transaction['to']}, value={transaction['value']} wei")
-            
-            signed_txn = self.w3.eth.account.sign_transaction(transaction, private_key)
-            logger.info(f"[PAYMENT] ✓ Transaction signed successfully")
-            
-            logger.info(f"[PAYMENT] 📤 Submitting payment transfer: {amount_eth} ETH from backend to {seller_address} (on behalf of {buyer_address})")
-            tx_hash = self._submit_transaction(signed_txn, wait_for_receipt=False)
-            logger.info(f"[PAYMENT] Result: tx_hash={tx_hash}")
-            return tx_hash
+
+            with self._nonce_lock:
+                nonce = self.w3.eth.get_transaction_count(account.address, "pending")
+                logger.info(f"[PAYMENT] Nonce: {nonce}")
+
+                # Get gas estimates for EIP-1559 (modern Ethereum/Sepolia)
+                try:
+                    gas_price_data = self.w3.eth.fee_history(1, 'latest')
+                    base_fee = gas_price_data['baseFeePerGas'][0]
+                    max_priority_fee = self.w3.to_wei(5, 'gwei')
+                    max_fee = base_fee * 2 + max_priority_fee
+                    logger.info(f"[PAYMENT] EIP-1559 fees: baseFee={self.w3.from_wei(base_fee, 'gwei')} gwei, priorityFee={self.w3.from_wei(max_priority_fee, 'gwei')} gwei, maxFee={self.w3.from_wei(max_fee, 'gwei')} gwei")
+                except Exception as e:
+                    logger.warning(f"[PAYMENT] ⚠️  Could not get EIP-1559 fees, falling back to higher fees: {e}")
+                    max_fee = self.w3.to_wei(20, 'gwei')
+                    max_priority_fee = self.w3.to_wei(5, 'gwei')
+                    logger.info(f"[PAYMENT] Using fallback fees: maxFee={self.w3.from_wei(max_fee, 'gwei')} gwei")
+
+                transaction = {
+                    'from': account.address,
+                    'to': self._Web3.to_checksum_address(seller_address),
+                    'value': amount_wei,
+                    'gas': 21000,
+                    'maxFeePerGas': max_fee,
+                    'maxPriorityFeePerGas': max_priority_fee,
+                    'nonce': nonce,
+                }
+                logger.info(f"[PAYMENT] Transaction object created: from={transaction['from']}, to={transaction['to']}, value={transaction['value']} wei")
+
+                signed_txn = self.w3.eth.account.sign_transaction(transaction, private_key)
+                logger.info(f"[PAYMENT] ✓ Transaction signed successfully")
+
+                logger.info(f"[PAYMENT] 📤 Submitting payment transfer: {amount_eth} ETH from backend to {seller_address} (on behalf of {buyer_address})")
+                tx_hash = self._submit_transaction(signed_txn, wait_for_receipt=False)
+                logger.info(f"[PAYMENT] Result: tx_hash={tx_hash}")
+                return tx_hash
 
         except Exception as e:
             logger.error(f"Error transferring payment: {e}")
@@ -623,35 +735,36 @@ class BlockchainService:
                 return None
 
             account = self.w3.eth.account.from_key(private_key)
-            nonce = self.w3.eth.get_transaction_count(account.address,"pending")
-            
-            # Get gas estimates for EIP-1559
-            try:
-                gas_price_data = self.w3.eth.fee_history(1, 'latest')
-                base_fee = gas_price_data['baseFeePerGas'][0]
-                max_priority_fee = self.w3.to_wei(5, 'gwei')  # 5 gwei for Sepolia (was 1 gwei, too low)
-                max_fee = base_fee + max_priority_fee
-                logger.info(f"[CONSUME_ENERGY] EIP-1559 fees: maxFee={self.w3.from_wei(max_fee, 'gwei')} gwei")
-            except Exception as e:
-                logger.warning(f"[CONSUME_ENERGY] Could not get EIP-1559 fees: {e}")
-                # Use higher fallback fees
-                max_fee = self.w3.to_wei(10, 'gwei')
-                max_priority_fee = self.w3.to_wei(5, 'gwei')
 
-            transaction = self.contract.functions.consumeEnergyFor(
-                self._Web3.to_checksum_address(buyer_address),
-                energy_kwh
-            ).build_transaction({
-                'from': account.address,
-                'nonce': nonce,
-                'gas': 150000,
-                'maxFeePerGas': max_fee,  # EIP-1559
-                'maxPriorityFeePerGas': max_priority_fee,  # EIP-1559
-            })
+            with self._nonce_lock:
+                nonce = self.w3.eth.get_transaction_count(account.address, "pending")
 
-            signed_txn = self.w3.eth.account.sign_transaction(transaction, private_key)
-            logger.info(f"[CONSUME_ENERGY] ✓ Submitting consume energy transaction")
-            return self._submit_transaction(signed_txn)
+                # Get gas estimates for EIP-1559
+                try:
+                    gas_price_data = self.w3.eth.fee_history(1, 'latest')
+                    base_fee = gas_price_data['baseFeePerGas'][0]
+                    max_priority_fee = self.w3.to_wei(5, 'gwei')
+                    max_fee = base_fee * 2 + max_priority_fee
+                    logger.info(f"[CONSUME_ENERGY] EIP-1559 fees: maxFee={self.w3.from_wei(max_fee, 'gwei')} gwei")
+                except Exception as e:
+                    logger.warning(f"[CONSUME_ENERGY] Could not get EIP-1559 fees: {e}")
+                    max_fee = self.w3.to_wei(20, 'gwei')
+                    max_priority_fee = self.w3.to_wei(5, 'gwei')
+
+                transaction = self.contract.functions.consumeEnergyFor(
+                    self._Web3.to_checksum_address(buyer_address),
+                    energy_kwh
+                ).build_transaction({
+                    'from': account.address,
+                    'nonce': nonce,
+                    'gas': 150000,
+                    'maxFeePerGas': max_fee,
+                    'maxPriorityFeePerGas': max_priority_fee,
+                })
+
+                signed_txn = self.w3.eth.account.sign_transaction(transaction, private_key)
+                logger.info(f"[CONSUME_ENERGY] ✓ Submitting consume energy transaction")
+                return self._submit_transaction(signed_txn)
 
         except Exception as e:
             logger.error(f"Error consuming energy: {e}")

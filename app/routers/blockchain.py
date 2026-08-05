@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from typing import Optional, List
 from uuid import UUID
@@ -687,4 +687,71 @@ def get_platform_wallet(
         },
         "warning": warning
     }
+
+
+# ─── Admin: Nonce status (diagnose stuck queue) ───────────────────────────────
+
+@router.get(
+    "/admin/nonce-status",
+    summary="[Admin] Platform wallet nonce status",
+    description=(
+        "Admin-only endpoint.\n\n"
+        "Shows the current confirmed vs pending nonce for the platform wallet.\n\n"
+        "- **confirmed_nonce**: last nonce mined on-chain\n"
+        "- **pending_nonce**: next nonce the mempool expects\n"
+        "- **stuck_tx_count**: `pending - confirmed` = transactions stuck in the queue\n\n"
+        "If `stuck_tx_count > 0`, call `POST /blockchain/admin/flush-nonce-queue` to cancel them."
+    )
+)
+def get_nonce_status(
+    _: User = Depends(require_admin)
+):
+    blockchain = get_blockchain_service()
+    if not blockchain.is_available():
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Blockchain service is not available"
+        )
+    return blockchain.get_nonce_status()
+
+
+# ─── Admin: Flush stuck transaction queue ────────────────────────────────────
+
+@router.post(
+    "/admin/flush-nonce-queue",
+    summary="[Admin] Cancel all stuck pending transactions",
+    description=(
+        "Admin-only endpoint.\n\n"
+        "Clears the stuck transaction queue by sending **cancellation transactions** "
+        "(zero-value self-transfers) at each stuck nonce with a much higher gas price.\n\n"
+        "This follows the standard Ethereum technique: a replacement transaction at the "
+        "**same nonce** with ≥10% higher gas evicts the stuck one from the mempool.\n\n"
+        "Parameters:\n"
+        "- `gas_multiplier` (default 3.0): multiply current base fee by this factor "
+        "for the cancellation txs. Higher = faster replacement, more ETH spent.\n\n"
+        "After calling this:\n"
+        "1. Wait ~30–60 s for Sepolia to mine the cancellation txs.\n"
+        "2. Call `GET /blockchain/admin/nonce-status` to confirm `stuck_tx_count == 0`.\n"
+        "3. New listing / purchase transactions will work again."
+    )
+)
+def flush_nonce_queue(
+    gas_multiplier: float = Query(default=3.0, ge=1.1, le=10.0,
+                                  description="Base-fee multiplier for cancellation gas (min 1.1, max 10.0)"),
+    _: User = Depends(require_admin)
+):
+    blockchain = get_blockchain_service()
+    if not blockchain.is_available():
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Blockchain service is not available"
+        )
+    result = blockchain.flush_nonce_queue(gas_multiplier=gas_multiplier)
+    if "error" in result:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=result["error"]
+        )
+    return result
+
 
